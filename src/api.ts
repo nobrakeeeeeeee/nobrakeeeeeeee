@@ -1,0 +1,130 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export interface Hold {
+  place_code: number;
+  race_date: string;
+  place_key: string;
+  place_name: string;
+  period_start: string;
+  period_end: string;
+  paragraphday: number;
+  grade_name: string;
+  title: string;
+  title_csv: string;
+  nighter_name: string | null;
+  race_name: string;
+  race_class: string;
+  distance: number | null;
+  live_start_time: string | null;
+  live_end_time: string | null;
+  race_start_time: string | null;
+  now_race_no: number | null;
+  result_race_no: number | null;
+}
+
+export interface RaceInfo {
+  race_no: number;
+  race_name: string;
+  race_class: string;
+  distance: number | null;
+  weather: string;
+  race_weather: string;
+  temp: string;
+  humid: string;
+  roadtemp: string;
+  situation_code: number | null;
+  race_start_time: string;
+  final_race_no: number | null;
+  grade_name: string;
+  title: string;
+  paragraphday: number | null;
+}
+
+export interface Entry {
+  car_no: number;
+  player_code: string;
+  player_name: string;
+  player_name_kana: string;
+  age: number | null;
+  rank: string;
+  handicap: number | null;
+  bike_class: number | null;
+  bike_name: string;
+  graduation_code: string;
+  place_name: string;
+  trial_run_time: string;
+  absent: number;
+}
+
+export interface RaceResultRow {
+  ord: number;
+  car_no: number | null;
+  player_code: string | null;
+  player_name: string | null;
+  player_name_en: string | null;
+  motorcycle_name: string | null;
+  handicap: number | null;
+  trial_time: string | null;
+  race_time: string | null;
+  st: string | null;
+  accident_name: string | null;
+  foul_code: string | null;
+}
+
+export interface RaceDetail {
+  hold: Hold | null;
+  infos: RaceInfo[];
+  entries: Entry[];
+  results: RaceResultRow[];
+}
+
+export interface PlayerRow {
+  player_code: string;
+  player_name: string;
+  player_name_kana: string;
+  place_code: number | null;
+  place_key: string;
+}
+
+export interface PlayerHistoryRow {
+  race_date: string;
+  place_code: number;
+  race_no: number;
+  ord: number | null;
+  car_no: number | null;
+  race_time: string | null;
+  st: string | null;
+  trial_time: string | null;
+  accident_name: string | null;
+}
+
+export interface CollectReport {
+  place_code: number;
+  race_date: string;
+  races_attempted: number;
+  programs_saved: number;
+  entries_saved: number;
+  results_saved: number;
+  infos_saved: number;
+  errors: string[];
+}
+
+export const api = {
+  todayHolds: () => invoke<Hold[]>("today_holds"),
+  recentHolds: (placeCode: number) => invoke<Hold[]>("recent_holds", { placeCode }),
+  listHolds: (limit = 300) => invoke<Hold[]>("list_holds", { limit }),
+  raceNumbers: (placeCode: number, raceDate: string) =>
+    invoke<number[]>("race_numbers", { placeCode, raceDate }),
+  raceDetail: (placeCode: number, raceDate: string, raceNo: number) =>
+    invoke<RaceDetail>("race_detail", { placeCode, raceDate, raceNo }),
+  collectDay: (placeCode: number, raceDate: string) =>
+    invoke<CollectReport>("collect_day", { placeCode, raceDate }),
+  syncPlayers: () => invoke<number>("sync_players"),
+  searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),
+  playerDetail: (playerCode: string) =>
+    invoke<{ profile: any; history: PlayerHistoryRow[] }>("player_detail", { playerCode }),
+  dbStats: () => invoke<{ holds: number; players: number }>("db_stats"),
+  onCollectLog: (cb: (msg: string) => void): Promise<UnlistenFn> =>
+    listen<string>("collect-log", (e) => cb(e.payload)),
+};

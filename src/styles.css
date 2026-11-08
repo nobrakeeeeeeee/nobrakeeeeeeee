@@ -1,0 +1,323 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", system-ui, sans-serif;
+  background: #14161a;
+  color: #e6e6e6;
+  font-size: 14px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 20px;
+  background: #1d2129;
+  border-bottom: 1px solid #2c3240;
+}
+
+.header h1 {
+  font-size: 18px;
+  margin: 0;
+  color: #ffb347;
+}
+
+nav {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: #9aa3b2;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.tab.active {
+  background: #2c3240;
+  color: #fff;
+}
+
+main {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.toolbar h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+button {
+  background: #2c3240;
+  color: #e6e6e6;
+  border: 1px solid #3a4254;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover:not(:disabled) {
+  background: #3a4254;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: #6ea8fe;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.chip {
+  display: inline-block;
+  margin: 2px;
+}
+
+.chip.active {
+  background: #35507a;
+  border-color: #4a6ea9;
+}
+
+.split {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+}
+
+.sidebar {
+  width: 340px;
+  min-width: 300px;
+  overflow-y: auto;
+  border-right: 1px solid #2c3240;
+  padding-right: 12px;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.content h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.hold-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: #1d2129;
+  border: 1px solid #2c3240;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.card-title {
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.card-sub {
+  margin: 4px 0;
+}
+
+.card-meta {
+  color: #9aa3b2;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.card-times {
+  color: #9aa3b2;
+  font-size: 12px;
+}
+
+.date-header {
+  font-weight: bold;
+  margin: 12px 0 4px;
+  color: #ffb347;
+}
+
+.hold-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: #1d2129;
+  border: 1px solid #2c3240;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+}
+
+.hold-item.active {
+  border-color: #4a6ea9;
+  background: #233047;
+}
+
+.hold-place {
+  font-weight: bold;
+}
+
+.badge {
+  font-size: 11px;
+  color: #7ee2a8;
+}
+
+.race-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+th,
+td {
+  border: 1px solid #2c3240;
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  background: #1d2129;
+  position: sticky;
+  top: 0;
+}
+
+tbody tr:nth-child(even) {
+  background: #191d24;
+}
+
+tbody tr:hover {
+  background: #232936;
+}
+
+tr.top3 td:first-child {
+  color: #ffb347;
+  font-weight: bold;
+}
+
+tr.absent {
+  opacity: 0.45;
+}
+
+.error {
+  color: #ff7b72;
+}
+
+.error-list {
+  color: #ff7b72;
+  font-size: 12px;
+}
+
+.muted {
+  color: #9aa3b2;
+}
+
+.search {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #3a4254;
+  background: #1d2129;
+  color: #e6e6e6;
+  margin-bottom: 8px;
+}
+
+.player-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.collect-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.collect-form select,
+.collect-form input {
+  background: #1d2129;
+  color: #e6e6e6;
+  border: 1px solid #3a4254;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.collect-form option {
+  background: #1d2129;
+  color: #e6e6e6;
+}
+
+.place-fetch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.log {
+  background: #0e1013;
+  border: 1px solid #2c3240;
+  border-radius: 6px;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.json {
+  background: #0e1013;
+  border: 1px solid #2c3240;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  overflow-x: auto;
+}
