@@ -42,6 +42,25 @@ export default function Collect() {
     }
   };
 
+  const collectRecent = async (pc: number | null) => {
+    setBusy(true);
+    setLogs([]);
+    setReport(null);
+    try {
+      const r = await api.collectRecent(pc);
+      setLogs((l) => [
+        ...l,
+        `=== 一括収集完了: ${r.days_done}/${r.days_total} 日${r.cancelled ? "（キャンセル）" : ""} ===`,
+        ...(r.errors.length ? [`エラー ${r.errors.length} 件:`, ...r.errors.slice(0, 10)] : []),
+      ]);
+    } catch (e) {
+      setLogs((l) => [...l, `エラー: ${e}`]);
+    } finally {
+      setBusy(false);
+      api.dbStats().then(setStats).catch(() => {});
+    }
+  };
+
   const syncPlayers = async () => {
     setBusy(true);
     try {
@@ -88,7 +107,20 @@ export default function Collect() {
         <button onClick={syncPlayers} disabled={busy}>
           選手マスタを同期
         </button>
+        {busy ? (
+          <button onClick={() => api.cancelCollection()}>キャンセル</button>
+        ) : (
+          <>
+            <button onClick={() => collectRecent(placeCode)}>
+              この場の最近の開催を一括収集
+            </button>
+            <button onClick={() => collectRecent(null)}>全場の最近の開催を一括収集</button>
+          </>
+        )}
       </div>
+      <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+        一括収集は Hold/Recent が返す全開催日（当日を除く）が対象です。1日あたり最大36リクエスト×約1.2秒かかるため、全場分は数時間かかる場合があります。
+      </p>
 
       {report && (
         <div className="card" style={{ marginTop: 12 }}>

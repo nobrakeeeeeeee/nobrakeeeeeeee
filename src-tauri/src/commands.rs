@@ -3,12 +3,14 @@ use crate::db::Db;
 use crate::model::*;
 use chrono::NaiveDate;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, State};
 
 pub struct AppState {
     pub api: crate::api::ApiClient,
     pub db: Mutex<Db>,
+    pub cancel: AtomicBool,
 }
 
 fn sval(v: &Value, key: &str) -> String {
@@ -113,13 +115,13 @@ pub async fn today_holds(state: State<'_, AppState>) -> Result<Vec<Hold>, String
     Ok(holds)
 }
 
-#[tauri::command]
-pub async fn recent_holds(
-    state: State<'_, AppState>,
+/// Fetch Hold/Recent for a place and upsert one hold row per race day.
+async fn fetch_recent_holds(
+    api: &crate::api::ApiClient,
+    db: &Mutex<Db>,
     place_code: i64,
 ) -> Result<Vec<Hold>, String> {
-    let body = state
-        .api
+    let body = api
         .post("/race_info/XML/Hold/Recent", &json!({ "placeCode": place_code }))
         .await
         .map_err(|e| e.to_string())?;
@@ -160,13 +162,21 @@ pub async fn recent_holds(
                         now_race_no: None,
                         result_race_no: d.get("finalRaceNo").and_then(|v| v.as_i64()),
                     };
-                    let _ = state.db.lock().unwrap().upsert_hold(&hold);
+                    let _ = db.lock().unwrap().upsert_hold(&hold);
                     holds.push(hold);
                 }
             }
         }
     }
     Ok(holds)
+}
+
+#[tauri::command]
+pub async fn recent_holds(
+    state: State<'_, AppState>,
+    place_code: i64,
+) -> Result<Vec<Hold>, String> {
+    fetch_recent_holds(&state.api, &state.db, place_code).await
 }
 
 #[tauri::command]
@@ -199,13 +209,14 @@ pub async fn race_detail(
     })
 }
 
-#[tauri::command]
-pub async fn collect_day(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
+/// Collect one day (all races) of program/result/race-info data.
+async fn collect_one_day(
+    app: &tauri::AppHandle,
+    state: &AppState,
     place_code: i64,
-    race_date: String,
+    race_date: &str,
 ) -> Result<CollectReport, String> {
+    let race_date = race_date.to_string();
     let mut report = CollectReport {
         place_code,
         race_date: race_date.clone(),
@@ -254,6 +265,10 @@ pub async fn collect_day(
     }
 
     for race_no in 1..=final_race_no {
+        if state.cancel.load(Ordering::Relaxed) {
+            emit("collection cancelled".to_string());
+            break;
+        }
         report.races_attempted += 1;
 
         // Program (entries + stats)
@@ -336,6 +351,89 @@ pub async fn collect_day(
     }
 
     Ok(report)
+}
+
+#[tauri::command]
+pub async fn collect_day(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    place_code: i64,
+    race_date: String,
+) -> Result<CollectReport, String> {
+    state.cancel.store(false, Ordering::Relaxed);
+    collect_one_day(&app, state.inner(), place_code, &race_date).await
+}
+
+/// Collect every race day returned by Hold/Recent for one place, or all
+/// five autorace venues when `place_code` is None.
+#[tauri::command]
+pub async fn collect_recent(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    place_code: Option<i64>,
+) -> Result<Value, String> {
+    state.cancel.store(false, Ordering::Relaxed);
+    let places: Vec<i64> = place_code.map(|c| vec![c]).unwrap_or_else(|| vec![2, 3, 4, 5, 6]);
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    let mut days_total = 0i64;
+    let mut days_done = 0i64;
+    let mut errors: Vec<String> = Vec::new();
+
+    'places: for pc in places {
+        let holds = match fetch_recent_holds(&state.api, &state.db, pc).await {
+            Ok(h) => h,
+            Err(e) => {
+                errors.push(format!("place {pc} recent holds: {e}"));
+                let _ = app.emit("collect-log", format!("place {pc}: failed to list holds ({e})"));
+                continue;
+            }
+        };
+        let mut seen = std::collections::HashSet::new();
+        for h in holds {
+            // Skip today and future dates; programs may not exist yet.
+            if h.race_date >= today || !seen.insert(h.race_date.clone()) {
+                continue;
+            }
+            days_total += 1;
+            let label = format!("{}/{} {}", h.place_name, h.race_date, h.title);
+            let _ = app.emit("collect-log", format!("=== {label} ==="));
+
+            if state.cancel.load(Ordering::Relaxed) {
+                let _ = app.emit("collect-log", "collection cancelled by user".to_string());
+                break 'places;
+            }
+
+            match collect_one_day(&app, state.inner(), h.place_code, &h.race_date).await {
+                Ok(r) => {
+                    days_done += 1;
+                    let _ = app.emit(
+                        "collect-log",
+                        format!(
+                            "--- {} done: {} programs, {} entries, {} results ---",
+                            r.race_date, r.programs_saved, r.entries_saved, r.results_saved
+                        ),
+                    );
+                }
+                Err(e) => {
+                    errors.push(format!("{}: {e}", h.race_date));
+                    let _ = app.emit("collect-log", format!("{}: error {e}", h.race_date));
+                }
+            }
+        }
+    }
+
+    Ok(json!({
+        "days_total": days_total,
+        "days_done": days_done,
+        "cancelled": state.cancel.load(Ordering::Relaxed),
+        "errors": errors,
+    }))
+}
+
+#[tauri::command]
+pub fn cancel_collection(state: State<'_, AppState>) {
+    state.cancel.store(true, Ordering::Relaxed);
 }
 
 #[tauri::command]

@@ -120,6 +120,12 @@ export const api = {
     invoke<RaceDetail>("race_detail", { placeCode, raceDate, raceNo }),
   collectDay: (placeCode: number, raceDate: string) =>
     invoke<CollectReport>("collect_day", { placeCode, raceDate }),
+  collectRecent: (placeCode: number | null) =>
+    invoke<{ days_total: number; days_done: number; cancelled: boolean; errors: string[] }>(
+      "collect_recent",
+      { placeCode }
+    ),
+  cancelCollection: () => invoke<void>("cancel_collection"),
   syncPlayers: () => invoke<number>("sync_players"),
   searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),
   playerDetail: (playerCode: string) =>

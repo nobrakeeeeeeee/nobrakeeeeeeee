@@ -21,6 +21,7 @@ pub fn run() {
             app.manage(AppState {
                 api: api::ApiClient::new(),
                 db: Mutex::new(db),
+                cancel: std::sync::atomic::AtomicBool::new(false),
             });
             Ok(())
         })
@@ -31,6 +32,8 @@ pub fn run() {
             commands::race_numbers,
             commands::race_detail,
             commands::collect_day,
+            commands::collect_recent,
+            commands::cancel_collection,
             commands::sync_players,
             commands::search_players,
             commands::player_detail,
