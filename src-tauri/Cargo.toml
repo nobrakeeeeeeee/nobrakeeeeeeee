@@ -23,5 +23,5 @@ reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "charset",
 ] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
