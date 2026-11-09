@@ -582,12 +582,12 @@ impl Db {
             .prepare(
                 "SELECT player_code, player_name, player_name_kana, place_code, place_key
                  FROM players
-                 WHERE player_code LIKE ?1 OR player_name LIKE ?1 OR player_name_kana LIKE ?1
-                 ORDER BY player_code LIMIT 200",
+                 WHERE ?1 = '' OR player_code LIKE ?2 OR player_name LIKE ?2 OR player_name_kana LIKE ?2
+                 ORDER BY player_code LIMIT 500",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params![like], |r| {
+            .query_map(params![query, like], |r| {
                 Ok(PlayerRow {
                     player_code: r.get(0)?,
                     player_name: r.get(1)?,

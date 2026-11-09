@@ -13,10 +13,6 @@ export default function Players() {
   const timer = useRef<number | null>(null);
 
   const search = async (q: string) => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
     try {
       setResults(await api.searchPlayers(q.trim()));
     } catch (e) {
@@ -72,10 +68,13 @@ export default function Players() {
         {syncMsg && <p className="muted">{syncMsg}</p>}
         <input
           className="search"
-          placeholder="名前・カナ・選手コード"
+          placeholder="選手コード(数字) / 名前・カナ(コピペ)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
+          WSLg環境では日本語IMEが使えません。空欄のままにすると全選手をコード順に一覧表示します。
+        </p>
         {error && <p className="error">{error}</p>}
         <div className="player-list">
           {results.map((p) => (
