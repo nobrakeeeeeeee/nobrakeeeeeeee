@@ -75,12 +75,25 @@ pub struct RaceResultRow {
     pub foul_code: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefundRow {
+    pub bet_type: String,
+    pub seq: i64,
+    pub combo: Option<String>,
+    pub finish_order: Option<i64>,
+    pub refund: Option<i64>,
+    pub popularity: Option<i64>,
+    pub votes: Option<String>,
+    pub type_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RaceDetail {
     pub hold: Option<Hold>,
     pub infos: Vec<RaceInfo>,
     pub entries: Vec<Entry>,
     pub results: Vec<RaceResultRow>,
+    pub refunds: Vec<RefundRow>,
 }
 
 #[derive(Debug, Clone, Serialize)]

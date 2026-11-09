@@ -72,11 +72,23 @@ export interface RaceResultRow {
   foul_code: string | null;
 }
 
+export interface RefundRow {
+  bet_type: string;
+  seq: number;
+  combo: string | null;
+  finish_order: number | null;
+  refund: number | null;
+  popularity: number | null;
+  votes: string | null;
+  type_name: string | null;
+}
+
 export interface RaceDetail {
   hold: Hold | null;
   infos: RaceInfo[];
   entries: Entry[];
   results: RaceResultRow[];
+  refunds: RefundRow[];
 }
 
 export interface PlayerRow {

@@ -206,6 +206,7 @@ pub async fn race_detail(
         infos: db.race_infos_for_day(place_code, &race_date)?,
         entries: db.entries_for_race(place_code, &race_date, race_no)?,
         results: db.results_for_race(place_code, &race_date, race_no)?,
+        refunds: db.refunds_for_race(place_code, &race_date, race_no)?,
     })
 }
 
@@ -338,6 +339,11 @@ async fn collect_one_day(
                     .lock()
                     .unwrap()
                     .save_race_result(place_code, &race_date, race_no, &body)?;
+                state
+                    .db
+                    .lock()
+                    .unwrap()
+                    .save_race_refunds(place_code, &race_date, race_no, &body)?;
                 if n > 0 {
                     report.results_saved += n as i64;
                     emit(format!("R{race_no}: result ok ({n} rows)"));

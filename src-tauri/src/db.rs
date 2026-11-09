@@ -113,6 +113,22 @@ impl Db {
                     fetched_at TEXT NOT NULL,
                     PRIMARY KEY (place_code, race_date, race_no, ord)
                 );
+                CREATE TABLE IF NOT EXISTS race_refunds (
+                    place_code INTEGER NOT NULL,
+                    race_date TEXT NOT NULL,
+                    race_no INTEGER NOT NULL,
+                    bet_type TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    combo TEXT,
+                    finish_order INTEGER,
+                    refund INTEGER,
+                    popularity INTEGER,
+                    votes TEXT,
+                    type_code INTEGER,
+                    type_name TEXT,
+                    fetched_at TEXT NOT NULL,
+                    PRIMARY KEY (place_code, race_date, race_no, bet_type, seq)
+                );
                 CREATE TABLE IF NOT EXISTS race_infos (
                     place_code INTEGER NOT NULL,
                     race_date TEXT NOT NULL,
@@ -346,6 +362,119 @@ impl Db {
             }
         }
         Ok(count)
+    }
+
+    /// Persist refundInfo (payouts for every bet type) from a RaceResult body.
+    pub fn save_race_refunds(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+        body: &Value,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+        let Some(info) = body.get("refundInfo").and_then(|v| v.as_object()) else {
+            return Ok(0);
+        };
+        for (bet_type, entry) in info {
+            let (type_code, type_name, items) = match entry {
+                Value::Object(o) => (
+                    o.get("typeCode").and_then(|v| v.as_i64()),
+                    o.get("typeName").and_then(|v| v.as_str()).map(String::from),
+                    o.get("list").and_then(|v| v.as_array()),
+                ),
+                Value::Array(a) => (None, None, Some(a)),
+                _ => (None, None, None),
+            };
+            let Some(items) = items else { continue };
+            for (seq, item) in items.iter().enumerate() {
+                let mut combo_parts: Vec<String> = Vec::new();
+                for key in ["carNo", "1thCarNo", "2thCarNo", "3thCarNo"] {
+                    if let Some(v) = item.get(key) {
+                        let s = match v {
+                            Value::String(s) => s.clone(),
+                            Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        if !s.is_empty() {
+                            combo_parts.push(s);
+                        }
+                    }
+                }
+                let combo = if combo_parts.is_empty() {
+                    None
+                } else {
+                    Some(combo_parts.join("-"))
+                };
+                let finish_order = item
+                    .get("order")
+                    .and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())));
+                self.conn
+                    .execute(
+                        "INSERT INTO race_refunds (place_code, race_date, race_no,
+                            bet_type, seq, combo, finish_order, refund, popularity,
+                            votes, type_code, type_name, fetched_at)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+                         ON CONFLICT(place_code, race_date, race_no, bet_type, seq)
+                         DO UPDATE SET
+                            combo=excluded.combo, finish_order=excluded.finish_order,
+                            refund=excluded.refund, popularity=excluded.popularity,
+                            votes=excluded.votes, type_code=excluded.type_code,
+                            type_name=excluded.type_name, fetched_at=excluded.fetched_at",
+                        params![
+                            place_code,
+                            race_date,
+                            race_no,
+                            bet_type,
+                            seq as i64,
+                            combo,
+                            finish_order,
+                            item.get("refund").and_then(|v| v.as_i64()),
+                            item.get("pop").and_then(|v| v.as_i64()),
+                            ov(item, "refundVotes"),
+                            type_code,
+                            type_name,
+                            Self::now(),
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    pub fn refunds_for_race(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+    ) -> Result<Vec<RefundRow>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT bet_type, seq, combo, finish_order, refund, popularity,
+                        votes, type_name
+                 FROM race_refunds
+                 WHERE place_code=?1 AND race_date=?2 AND race_no=?3
+                 ORDER BY bet_type, seq",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![place_code, race_date, race_no], |r| {
+                Ok(RefundRow {
+                    bet_type: r.get(0)?,
+                    seq: r.get(1)?,
+                    combo: r.get(2)?,
+                    finish_order: r.get(3)?,
+                    refund: r.get(4)?,
+                    popularity: r.get(5)?,
+                    votes: r.get(6)?,
+                    type_name: r.get(7)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
     // ---------- race info ----------
@@ -713,6 +842,38 @@ mod tests {
 
         let nos = db.race_numbers_for_day(2, "2026-11-09").unwrap();
         assert_eq!(nos, vec![1]);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn refund_roundtrip() {
+        let path = std::env::temp_dir().join(format!("nobrake_refund_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = Db::open(&path).unwrap();
+
+        let body = json!({"refundInfo": {
+            "tns": {"typeCode": 0, "typeName": "通常", "list": [
+                {"carNo": 4, "order": 1, "refund": 300, "pop": 2, "refundVotes": "188"}
+            ]},
+            "rtw": {"typeCode": 0, "typeName": "通常", "list": [
+                {"1thCarNo": 4, "2thCarNo": 7, "refund": 340, "pop": 2, "refundVotes": "928"}
+            ]},
+            "wid": {"typeCode": 0, "typeName": "通常", "list": [
+                {"1thCarNo": 4, "2thCarNo": 7, "refund": 120, "pop": 1, "refundVotes": "403"},
+                {"1thCarNo": 3, "2thCarNo": 4, "refund": 1770, "pop": 17, "refundVotes": "13"}
+            ]}
+        }});
+        assert_eq!(db.save_race_refunds(2, "2026-11-08", 1, &body).unwrap(), 4);
+
+        let refunds = db.refunds_for_race(2, "2026-11-08", 1).unwrap();
+        assert_eq!(refunds.len(), 4);
+        let rtw = refunds.iter().find(|r| r.bet_type == "rtw").unwrap();
+        assert_eq!(rtw.combo.as_deref(), Some("4-7"));
+        assert_eq!(rtw.refund, Some(340));
+        let tns = refunds.iter().find(|r| r.bet_type == "tns").unwrap();
+        assert_eq!(tns.finish_order, Some(1));
+        assert_eq!(tns.type_name.as_deref(), Some("通常"));
 
         let _ = std::fs::remove_file(&path);
     }

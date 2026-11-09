@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Hold, type RaceDetail as RaceDetailData } from "../api";
+import { api, type Hold, type RaceDetail as RaceDetailData, type RefundRow } from "../api";
 import type { RaceSelection } from "../App";
 
 const PLACES: [number, string][] = [
@@ -192,6 +192,7 @@ function RaceDetailView({ detail, raceNo }: { detail: RaceDetailData; raceNo: nu
           </table>
         </>
       )}
+      {detail.refunds.length > 0 && <RefundsView refunds={detail.refunds} />}
       <h3>出走表</h3>
       {detail.entries.length === 0 ? (
         <p className="muted">出走表データなし</p>
@@ -230,5 +231,64 @@ function RaceDetailView({ detail, raceNo }: { detail: RaceDetailData; raceNo: nu
         </table>
       )}
     </div>
+  );
+}
+
+const BET_LABELS: [string, string][] = [
+  ["tns", "単勝"],
+  ["fns", "複勝"],
+  ["rtw", "2連単"],
+  ["rfw", "2連複"],
+  ["rt3", "3連単"],
+  ["rf3", "3連複"],
+  ["wid", "ワイド"],
+];
+
+function RefundsView({ refunds }: { refunds: RefundRow[] }) {
+  const groups = new Map<string, RefundRow[]>();
+  for (const r of refunds) {
+    const list = groups.get(r.bet_type) ?? [];
+    list.push(r);
+    groups.set(r.bet_type, list);
+  }
+  const ordered = [
+    ...BET_LABELS.map(([k]) => k).filter((k) => groups.has(k)),
+    ...[...groups.keys()].filter((k) => !BET_LABELS.some(([bk]) => bk === k)),
+  ];
+  const labelOf = (k: string) => BET_LABELS.find(([bk]) => bk === k)?.[1] ?? k;
+  return (
+    <>
+      <h3>払戻金</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>賭式</th>
+            <th>買い目</th>
+            <th>着順</th>
+            <th>払戻</th>
+            <th>人気</th>
+            <th>票数</th>
+            <th>区分</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.flatMap((k) =>
+            (groups.get(k) ?? []).map((r, i) => (
+              <tr key={`${k}-${r.seq}-${i}`}>
+                {i === 0 && (
+                  <td rowSpan={(groups.get(k) ?? []).length}>{labelOf(k)}</td>
+                )}
+                <td>{r.combo ?? "-"}</td>
+                <td>{r.finish_order ?? ""}</td>
+                <td>{r.refund != null ? `${r.refund}円` : "-"}</td>
+                <td>{r.popularity ?? "-"}番人気</td>
+                <td>{r.votes ?? "-"}</td>
+                <td>{r.type_name && r.type_name !== "通常" ? r.type_name : ""}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </>
   );
 }
