@@ -4,13 +4,12 @@
 Usage: generate-latest-json.py <release-files-dir>
 
 Expects the directory to already contain the installer artifacts (flat).
-For each updater-supported platform it copies the artifact to a
+For each updater-supported platform it renames the artifact to a
 space-free filename and writes latest.json alongside it.
 """
 
 import json
 import os
-import shutil
 import sys
 from datetime import datetime, timezone
 
@@ -38,13 +37,14 @@ def add_platform(
         print(f"warning: missing signature for {artifact}", file=sys.stderr)
         return
 
+    with open(sig_path, encoding="utf-8") as f:
+        signature = f.read().strip()
+
     asset_name = f"{APP}_{version}_{asset_suffix}"
     dest = os.path.join(directory, asset_name)
     if os.path.abspath(artifact) != os.path.abspath(dest):
-        shutil.copyfile(artifact, dest)
-
-    with open(sig_path, encoding="utf-8") as f:
-        signature = f.read().strip()
+        os.replace(artifact, dest)
+        os.replace(sig_path, dest + ".sig")
 
     platforms[key] = {
         "signature": signature,
@@ -82,6 +82,8 @@ def main() -> int:
     for name in sorted(os.listdir(directory)):
         # Matches both <App>.app.tar.gz and <App>.app.<arch>.tar.gz while
         # excluding unrelated tarballs like deb's data.tar.gz.
+        if name.startswith(APP + "_"):
+            continue
         if not (name.endswith(".tar.gz") and ".app." in name):
             continue
         if ".aarch64." in name:

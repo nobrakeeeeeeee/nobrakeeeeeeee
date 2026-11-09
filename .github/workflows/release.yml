@@ -82,10 +82,11 @@ jobs:
       - name: Collect installer files
         run: |
           mkdir -p release-files
-          find dist -type f \( \
+          find dist -type f ! -name 'control.tar.gz' ! -name 'data.tar.gz' \( \
             -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \
             -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
-            -o -name '*.tar.gz' -o -name '*.sig' -o -name 'latest.json' \
+            -o -name '*.app.tar.gz' -o -name '*.app.*.tar.gz' \
+            -o -name '*.sig' -o -name 'latest.json' \
           \) -exec cp {} release-files/ \;
           ls -la release-files/
 
