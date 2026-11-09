@@ -68,12 +68,12 @@ export default function Players() {
         {syncMsg && <p className="muted">{syncMsg}</p>}
         <input
           className="search"
-          placeholder="選手コード(数字) / 名前・カナ(コピペ)"
+          placeholder="選手コード / 名前・カナで検索"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
-          WSLg環境では日本語IMEが使えません。空欄のままにすると全選手をコード順に一覧表示します。
+          空欄のままにすると全選手をコード順に一覧表示します。
         </p>
         {error && <p className="error">{error}</p>}
         <div className="player-list">
