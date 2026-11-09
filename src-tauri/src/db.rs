@@ -964,6 +964,84 @@ impl Db {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
+    /// Aggregated stats from collected race_results for one player.
+    pub fn player_stats(&self, player_code: &str) -> Result<PlayerStats, String> {
+        let mut stats = PlayerStats::default();
+        self.conn
+            .query_row(
+                "SELECT COUNT(*),
+                        COALESCE(SUM(ord=1),0), COALESCE(SUM(ord=2),0), COALESCE(SUM(ord=3),0),
+                        COALESCE(SUM(ord<=2),0), COALESCE(SUM(ord<=3),0),
+                        AVG(CASE WHEN st IS NOT NULL AND st != '' THEN CAST(st AS REAL) END),
+                        AVG(CASE WHEN race_time IS NOT NULL AND race_time != ''
+                            THEN CAST(race_time AS REAL) END)
+                 FROM race_results WHERE player_code=?1",
+                params![player_code],
+                |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                        r.get::<_, i64>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, i64>(5)?,
+                        r.get::<_, Option<f64>>(6)?,
+                        r.get::<_, Option<f64>>(7)?,
+                    ))
+                },
+            )
+            .map(|(races, f, s, t, t2, t3, ast, atime)| {
+                stats.races = races;
+                stats.first = f;
+                stats.second = s;
+                stats.third = t;
+                stats.top2 = t2;
+                stats.top3 = t3;
+                stats.avg_st = ast;
+                stats.avg_time = atime;
+            })
+            .map_err(|e| e.to_string())?;
+
+        stats.by_place = self.stat_groups(
+            player_code,
+            "SELECT COALESCE(h.place_name, '不明'), COUNT(*),
+                    COALESCE(SUM(r.ord=1),0), COALESCE(SUM(r.ord<=2),0), COALESCE(SUM(r.ord<=3),0)
+             FROM race_results r
+             LEFT JOIN holds h ON h.place_code = r.place_code AND h.race_date = r.race_date
+             WHERE r.player_code=?1
+             GROUP BY r.place_code
+             ORDER BY COUNT(*) DESC, r.place_code",
+        )?;
+
+        stats.by_car = self.stat_groups(
+            player_code,
+            "SELECT CAST(car_no AS TEXT) || '車', COUNT(*),
+                    COALESCE(SUM(ord=1),0), COALESCE(SUM(ord<=2),0), COALESCE(SUM(ord<=3),0)
+             FROM race_results
+             WHERE player_code=?1 AND car_no IS NOT NULL
+             GROUP BY car_no
+             ORDER BY car_no",
+        )?;
+
+        Ok(stats)
+    }
+
+    fn stat_groups(&self, player_code: &str, sql: &str) -> Result<Vec<PlayerStatGroup>, String> {
+        let mut stmt = self.conn.prepare(sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![player_code], |r| {
+                Ok(PlayerStatGroup {
+                    label: r.get(0)?,
+                    races: r.get(1)?,
+                    first: r.get(2)?,
+                    top2: r.get(3)?,
+                    top3: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
     pub fn player_count(&self) -> Result<i64, String> {
         self.conn
             .query_row("SELECT COUNT(*) FROM players", [], |r| r.get(0))

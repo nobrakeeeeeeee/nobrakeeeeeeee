@@ -129,6 +129,27 @@ export interface PlayerHistoryRow {
   accident_name: string | null;
 }
 
+export interface PlayerStatGroup {
+  label: string;
+  races: number;
+  first: number;
+  top2: number;
+  top3: number;
+}
+
+export interface PlayerStats {
+  races: number;
+  first: number;
+  second: number;
+  third: number;
+  top2: number;
+  top3: number;
+  avg_st: number | null;
+  avg_time: number | null;
+  by_place: PlayerStatGroup[];
+  by_car: PlayerStatGroup[];
+}
+
 export interface CollectReport {
   place_code: number;
   race_date: string;
@@ -165,7 +186,7 @@ export const api = {
   syncPlayers: () => invoke<number>("sync_players"),
   searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),
   playerDetail: (playerCode: string) =>
-    invoke<{ profile: any; history: PlayerHistoryRow[] }>("player_detail", { playerCode }),
+    invoke<{ profile: any; history: PlayerHistoryRow[]; stats: PlayerStats }>("player_detail", { playerCode }),
   dbStats: () => invoke<{ holds: number; players: number }>("db_stats"),
   onCollectLog: (cb: (msg: string) => void): Promise<UnlistenFn> =>
     listen<string>("collect-log", (e) => cb(e.payload)),

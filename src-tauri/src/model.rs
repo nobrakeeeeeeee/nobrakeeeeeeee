@@ -118,6 +118,29 @@ pub struct RaceDetail {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PlayerStatGroup {
+    pub label: String,
+    pub races: i64,
+    pub first: i64,
+    pub top2: i64,
+    pub top3: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct PlayerStats {
+    pub races: i64,
+    pub first: i64,
+    pub second: i64,
+    pub third: i64,
+    pub top2: i64,
+    pub top3: i64,
+    pub avg_st: Option<f64>,
+    pub avg_time: Option<f64>,
+    pub by_place: Vec<PlayerStatGroup>,
+    pub by_car: Vec<PlayerStatGroup>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PlayerRow {
     pub player_code: String,
     pub player_name: String,

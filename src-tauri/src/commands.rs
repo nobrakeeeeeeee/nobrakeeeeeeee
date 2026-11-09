@@ -567,7 +567,13 @@ pub async fn player_detail(
         .unwrap()
         .player_history(&player_code, 50)
         .unwrap_or_default();
-    Ok(json!({ "profile": profile, "history": history }))
+    let stats = state
+        .db
+        .lock()
+        .unwrap()
+        .player_stats(&player_code)
+        .unwrap_or_default();
+    Ok(json!({ "profile": profile, "history": history, "stats": stats }))
 }
 
 #[tauri::command]

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, type PlayerRow, type PlayerHistoryRow } from "../api";
+import { api, type PlayerRow, type PlayerHistoryRow, type PlayerStats, type PlayerStatGroup } from "../api";
 
 export default function Players() {
   const [query, setQuery] = useState("");
@@ -7,6 +7,7 @@ export default function Players() {
   const [selected, setSelected] = useState<PlayerRow | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [history, setHistory] = useState<PlayerHistoryRow[]>([]);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -33,11 +34,13 @@ export default function Players() {
     setSelected(p);
     setProfile(null);
     setHistory([]);
+    setStats(null);
     setError(null);
     try {
       const d = await api.playerDetail(p.player_code);
       setProfile(d.profile);
       setHistory(d.history);
+      setStats(d.stats);
     } catch (e) {
       setError(String(e));
     }
@@ -103,6 +106,14 @@ export default function Players() {
             </h2>
             {profile == null && <p>読み込み中...</p>}
             {profile != null && <ProfileView profile={profile} />}
+            <h3>収集データ成績</h3>
+            {stats == null ? (
+              <p className="muted">読み込み中...</p>
+            ) : stats.races === 0 ? (
+              <p className="muted">収集済みデータなし</p>
+            ) : (
+              <StatsView stats={stats} />
+            )}
             <h3>収集済み戦績</h3>
             {history.length === 0 ? (
               <p className="muted">収集済みデータなし</p>
@@ -174,6 +185,65 @@ function InfoTable({ rows }: { rows: [string, ReactNode][] }) {
 const dash = (v: any) => (v === null || v === undefined || v === "" ? "-" : String(v));
 const pct = (v: any) => (v === null || v === undefined || v === "" ? "-" : `${v}%`);
 const joinList = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join("、") : dash(v));
+
+const statRate = (n: number, d: number) =>
+  d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "-";
+
+function StatGroupTable({ title, rows }: { title: string; rows: PlayerStatGroup[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <>
+      <h4 style={{ margin: "12px 0 4px" }}>{title}</h4>
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>出走</th>
+            <th>1着率</th>
+            <th>2連対率</th>
+            <th>3連対率</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((g) => (
+            <tr key={g.label}>
+              <td>{g.label}</td>
+              <td>{g.races}</td>
+              <td>{statRate(g.first, g.races)}</td>
+              <td>{statRate(g.top2, g.races)}</td>
+              <td>{statRate(g.top3, g.races)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function StatsView({ stats }: { stats: PlayerStats }) {
+  return (
+    <div>
+      <p className="muted" style={{ fontSize: 12 }}>
+        収集済みレース（{stats.races}走）のみの集計です。
+      </p>
+      <InfoTable
+        rows={[
+          ["出走", stats.races],
+          ["1着", stats.first],
+          ["2着", stats.second],
+          ["3着", stats.third],
+          ["単勝率", statRate(stats.first, stats.races)],
+          ["2連対率", statRate(stats.top2, stats.races)],
+          ["3連対率", statRate(stats.top3, stats.races)],
+          ["平均ST", stats.avg_st != null ? stats.avg_st.toFixed(2) : null],
+          ["平均タイム", stats.avg_time != null ? stats.avg_time.toFixed(3) : null],
+        ]}
+      />
+      <StatGroupTable title="場別成績" rows={stats.by_place} />
+      <StatGroupTable title="車番別成績" rows={stats.by_car} />
+    </div>
+  );
+}
 
 function ProfileView({ profile }: { profile: any }) {
   const p = profile?.profile ?? {};
