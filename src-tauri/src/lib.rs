@@ -33,6 +33,7 @@ pub fn run() {
             commands::race_detail,
             commands::collect_day,
             commands::collect_recent,
+            commands::collect_range,
             commands::cancel_collection,
             commands::sync_players,
             commands::search_players,

@@ -125,6 +125,11 @@ export const api = {
       "collect_recent",
       { placeCode }
     ),
+  collectRange: (placeCode: number, startDate: string, endDate: string) =>
+    invoke<{ days_total: number; days_done: number; days_skipped: number; cancelled: boolean; errors: string[] }>(
+      "collect_range",
+      { placeCode, startDate, endDate }
+    ),
   cancelCollection: () => invoke<void>("cancel_collection"),
   syncPlayers: () => invoke<number>("sync_players"),
   searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),

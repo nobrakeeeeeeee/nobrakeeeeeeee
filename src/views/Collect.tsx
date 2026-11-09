@@ -11,7 +11,8 @@ const PLACES: [number, string][] = [
 
 export default function Collect() {
   const [placeCode, setPlaceCode] = useState(2);
-  const [raceDate, setRaceDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
   const [report, setReport] = useState<CollectReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,13 +28,17 @@ export default function Collect() {
   }, []);
 
   const collect = async () => {
-    if (!raceDate) return;
+    if (!startDate) return;
     setBusy(true);
     setLogs([]);
     setReport(null);
     try {
-      const r = await api.collectDay(placeCode, raceDate);
-      setReport(r);
+      const r = await api.collectRange(placeCode, startDate, endDate || startDate);
+      setLogs((l) => [
+        ...l,
+        `=== 期間収集完了: ${r.days_done} 日分収集 / ${r.days_skipped} 日スキップ / 全${r.days_total}日${r.cancelled ? "（キャンセル）" : ""} ===`,
+        ...(r.errors.length ? [`エラー ${r.errors.length} 件:`, ...r.errors.slice(0, 10)] : []),
+      ]);
     } catch (e) {
       setLogs((l) => [...l, `エラー: ${e}`]);
     } finally {
@@ -98,11 +103,15 @@ export default function Collect() {
           </select>
         </label>
         <label>
-          日付:{" "}
-          <input type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} />
+          開始日:{" "}
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </label>
-        <button onClick={collect} disabled={busy || !raceDate}>
-          {busy ? "収集中..." : "この日を収集"}
+        <label>
+          終了日:{" "}
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </label>
+        <button onClick={collect} disabled={busy || !startDate}>
+          {busy ? "収集中..." : "期間を収集"}
         </button>
         <button onClick={syncPlayers} disabled={busy}>
           選手マスタを同期
@@ -119,7 +128,7 @@ export default function Collect() {
         )}
       </div>
       <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-        一括収集は Hold/Recent が返す全開催日（当日を除く）が対象です。1日あたり最大36リクエスト×約1.2秒かかるため、全場分は数時間かかる場合があります。
+        期間収集は開始日〜終了日を1日ずつ処理します（終了日が空なら開始日のみ、当日以降は自動で除外）。開催のない日は1リクエストでスキップ、開催日は最大36リクエスト×約1.2秒かかります。
       </p>
 
       {report && (

@@ -364,6 +364,74 @@ pub async fn collect_day(
     collect_one_day(&app, state.inner(), place_code, &race_date).await
 }
 
+/// Collect every calendar day in [start_date, end_date] for a place.
+/// Days without a hold cost a single OtherRaceInfo probe request.
+#[tauri::command]
+pub async fn collect_range(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    place_code: i64,
+    start_date: String,
+    end_date: String,
+) -> Result<Value, String> {
+    state.cancel.store(false, Ordering::Relaxed);
+    let start = NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
+        .map_err(|_| format!("invalid start_date: {start_date}"))?;
+    let end = NaiveDate::parse_from_str(&end_date, "%Y-%m-%d")
+        .map_err(|_| format!("invalid end_date: {end_date}"))?;
+    if end < start {
+        return Err("end_date is before start_date".to_string());
+    }
+    let today = chrono::Local::now().date_naive();
+    let last = end.min(today - chrono::Duration::days(1));
+
+    let mut days_total = 0i64;
+    let mut days_done = 0i64;
+    let mut days_skipped = 0i64;
+    let mut errors: Vec<String> = Vec::new();
+
+    let mut d = start;
+    while d <= last {
+        if state.cancel.load(Ordering::Relaxed) {
+            let _ = app.emit("collect-log", "collection cancelled by user".to_string());
+            break;
+        }
+        let date = d.format("%Y-%m-%d").to_string();
+        days_total += 1;
+        let _ = app.emit("collect-log", format!("=== {date} ==="));
+
+        match collect_one_day(&app, state.inner(), place_code, &date).await {
+            Ok(r) => {
+                if r.programs_saved == 0 && r.entries_saved == 0 {
+                    days_skipped += 1;
+                } else {
+                    days_done += 1;
+                }
+                let _ = app.emit(
+                    "collect-log",
+                    format!(
+                        "--- {date} done: {} programs, {} entries, {} results ---",
+                        r.programs_saved, r.entries_saved, r.results_saved
+                    ),
+                );
+            }
+            Err(e) => {
+                errors.push(format!("{date}: {e}"));
+                let _ = app.emit("collect-log", format!("{date}: error {e}"));
+            }
+        }
+        d += chrono::Duration::days(1);
+    }
+
+    Ok(json!({
+        "days_total": days_total,
+        "days_done": days_done,
+        "days_skipped": days_skipped,
+        "cancelled": state.cancel.load(Ordering::Relaxed),
+        "errors": errors,
+    }))
+}
+
 /// Collect every race day returned by Hold/Recent for one place, or all
 /// five autorace venues when `place_code` is None.
 #[tauri::command]
