@@ -25,6 +25,7 @@ pub fn run() {
             });
             Ok(())
         })
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::today_holds,
             commands::recent_holds,

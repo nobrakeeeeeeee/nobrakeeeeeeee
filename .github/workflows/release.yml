@@ -59,6 +59,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -71,9 +73,15 @@ jobs:
           find dist -type f \( \
             -name '*.msi' -o -name '*.exe' -o -name '*.dmg' \
             -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
-            -o -name '*.tar.gz' -o -name '*.sig' \
+            -o -name '*.tar.gz' -o -name '*.sig' -o -name 'latest.json' \
           \) -exec cp {} release-files/ \;
           ls -la release-files/
+
+      - name: Generate latest.json for updater
+        run: python3 scripts/generate-latest-json.py release-files
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

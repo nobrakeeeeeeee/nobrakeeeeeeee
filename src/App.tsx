@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Today from "./views/Today";
 import Holds from "./views/Holds";
 import Players from "./views/Players";
 import Collect from "./views/Collect";
+import { checkForUpdate, installAndRelaunch } from "./updater";
+import type { Update } from "@tauri-apps/plugin-updater";
 
 type Tab = "today" | "holds" | "players" | "collect";
 
@@ -16,6 +18,25 @@ export interface RaceSelection {
 export default function App() {
   const [tab, setTab] = useState<Tab>("today");
   const [sel, setSel] = useState<RaceSelection | null>(null);
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => {
+    checkForUpdate().then((u) => {
+      if (u) setUpdate(u);
+    });
+  }, []);
+
+  const applyUpdate = async () => {
+    if (!update) return;
+    setUpdating(true);
+    try {
+      await installAndRelaunch(update);
+    } catch (e) {
+      alert(`更新に失敗しました: ${e}`);
+      setUpdating(false);
+    }
+  };
 
   const openRace = (s: RaceSelection) => {
     setSel(s);
@@ -45,6 +66,14 @@ export default function App() {
           ))}
         </nav>
       </header>
+      {update && (
+        <div className="update-banner">
+          新しいバージョン v{update.version} が利用可能です
+          <button onClick={applyUpdate} disabled={updating}>
+            {updating ? "更新中..." : "今すぐ更新"}
+          </button>
+        </div>
+      )}
       <main>
         {tab === "today" && <Today onOpenRace={openRace} />}
         {tab === "holds" && <Holds initial={sel} />}

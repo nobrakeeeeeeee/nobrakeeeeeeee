@@ -26,6 +26,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": ["icons/icon.png"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDODdCN0QzQjdCNEVGOEUKUldTTzc3UzMwN2VIcktDakI4c2FHWVRxVWRpcjhXV0o1UUlFYkVLaEFDWU1HYTFPMk9GWmdoVTEK",
+      "endpoints": [
+        "https://github.com/shimomo/nobrakeeeeeeee/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
