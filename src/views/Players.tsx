@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type PlayerRow, type PlayerHistoryRow } from "../api";
 
 export default function Players() {
@@ -145,34 +145,295 @@ export default function Players() {
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <h3>{title}</h3>
+      {children}
+    </>
+  );
+}
+
+function InfoTable({ rows }: { rows: [string, ReactNode][] }) {
+  const visible = rows.filter(([, v]) => v !== null && v !== undefined && v !== "");
+  if (visible.length === 0) return null;
+  return (
+    <table>
+      <tbody>
+        {visible.map(([k, v]) => (
+          <tr key={k}>
+            <td className="muted" style={{ width: 140 }}>{k}</td>
+            <td>{v}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+const dash = (v: any) => (v === null || v === undefined || v === "" ? "-" : String(v));
+const pct = (v: any) => (v === null || v === undefined || v === "" ? "-" : `${v}%`);
+const joinList = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join("、") : dash(v));
+
 function ProfileView({ profile }: { profile: any }) {
   const p = profile?.profile ?? {};
   const tr = profile?.totalResult ?? {};
   const ch = profile?.characteristics ?? {};
-  const entries: [string, any][] = Object.entries(p);
+  const l10 = profile?.latest10Result ?? {};
+  const l10g = profile?.latest10GoodTrackResult ?? {};
+  const yr = profile?.thisYearResult ?? {};
+  const l90 = profile?.latest90Result ?? {};
+  const l180 = profile?.latest180Result ?? {};
+  const titles = profile?.winTitleList ?? [];
+  const schedule = profile?.attendScheduleList ?? [];
+  const recent = profile?.latest5ResultList ?? [];
+
   return (
     <div>
-      <div className="card-meta" style={{ marginBottom: 8 }}>
-        {p.playerName} / {p.playerNameKana} / {p.age}歳 / {p.placeName}
-      </div>
-      {entries.length > 0 && (
+      <Section title="基本情報">
+        <InfoTable
+          rows={[
+            ["氏名", p.playerName],
+            ["フリガナ", p.playerNameKana],
+            ["ローマ字", p.playerNameEn],
+            ["所属", p.placeName],
+            ["出身地", p.hometown],
+            ["年齢", p.age != null ? `${p.age}歳` : null],
+            ["生年月日", p.birthday],
+            ["期別", p.graduation],
+            ["選手登録", p.registDate],
+            ["登録番号", p.registNo],
+            ["所有車", joinList(p.motorcycleList)],
+            ["身長", p.height != null ? `${p.height}cm` : null],
+            ["体重", p.weight != null ? `${p.weight}kg` : null],
+            ["血液型", p.blood],
+            ["星座", p.constellation],
+            ["趣味", joinList(p.hobbyList)],
+          ]}
+        />
+      </Section>
+
+      <Section title="ランク・ポイント">
+        <InfoTable
+          rows={[
+            ["現行ランク", p.currentRank],
+            ["前期ランク", p.lastRank],
+            ["審査ポイント", p.point],
+          ]}
+        />
+      </Section>
+
+      <Section title="通算成績">
+        <InfoTable
+          rows={[
+            ["通算V回数", tr.winCount],
+            ["1着", tr.countOf1th],
+            ["2着", tr.countOf2th],
+            ["3着", tr.countOf3th],
+            ["単勝率", pct(tr.rate1)],
+            ["2連対率", pct(tr.rate2)],
+            ["3連対率", pct(tr.rate3)],
+          ]}
+        />
+      </Section>
+
+      <Section title="選手の特徴">
+        <InfoTable
+          rows={[
+            ["Ｓ力", ch.startPower],
+            ["独走力", ch.runAlonePower],
+            ["追込み力", ch.catchUpPower],
+            ["雨巧拙", ch.wetTrackSkill],
+            ["コース", ch.course],
+          ]}
+        />
+      </Section>
+
+      <Section title="近10走">
         <table>
+          <thead>
+            <tr>
+              <th>1着</th>
+              <th>2着</th>
+              <th>3着</th>
+              <th>着外</th>
+              <th>2連対率</th>
+              <th>3連対率</th>
+              <th>平均試走T</th>
+              <th>平均競走T</th>
+              <th>最高競走T</th>
+            </tr>
+          </thead>
           <tbody>
-            {entries.map(([k, v]) => (
-              <tr key={k}>
-                <td className="muted">{k}</td>
-                <td>{typeof v === "object" ? JSON.stringify(v) : String(v ?? "")}</td>
-              </tr>
-            ))}
+            <tr>
+              <td>{dash(l10.countOf1th)}</td>
+              <td>{dash(l10.countOf2th)}</td>
+              <td>{dash(l10.countOf3th)}</td>
+              <td>{dash(l10.countOfOther)}</td>
+              <td>{pct(l10.rate2)}</td>
+              <td>{pct(l10.rate3)}</td>
+              <td>{dash(l10g.traialAveTime)}</td>
+              <td>{dash(l10g.raceAveTime)}</td>
+              <td>{dash(l10g.raceBestTime)}</td>
+            </tr>
           </tbody>
         </table>
-      )}
-      {(Object.keys(tr).length > 0 || Object.keys(ch).length > 0) && (
-        <>
-          <h3>通算成績</h3>
-          <pre className="json">{JSON.stringify({ totalResult: tr, characteristics: ch }, null, 2)}</pre>
-        </>
-      )}
+        <InfoTable
+          rows={[
+            ["今年V", yr.winCount],
+            ["今年優出", yr.advanceFinalCount],
+          ]}
+        />
+      </Section>
+
+      <Section title="近90日成績">
+        <InfoTable
+          rows={[
+            ["出走", l90.runCount],
+            ["優出", l90.advanceFinalCount],
+            ["優勝", l90.winCount],
+            ["直近優勝", l90.latestWinDate ? `${l90.latestWinDate} ${l90.latestWinPlace ?? ""}` : null],
+          ]}
+        />
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>平均試走T</th>
+              <th>平均競走T</th>
+              <th>平均ST</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="muted">良</td>
+              <td>{dash(l90.goodTrackTime?.traialAveTime)}</td>
+              <td>{dash(l90.goodTrackTime?.raceAveTime)}</td>
+              <td>{dash(l90.goodTrackTime?.stAve)}</td>
+            </tr>
+            <tr>
+              <td className="muted">湿</td>
+              <td>{dash(l90.wetTrackTime?.traialAveTime)}</td>
+              <td>{dash(l90.wetTrackTime?.raceAveTime)}</td>
+              <td>{dash(l90.wetTrackTime?.stAve)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </Section>
+
+      <Section title="勝率(180日)">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>単勝率</th>
+              <th>2連対率</th>
+              <th>3連対率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(["goodTrack", "wetTrack"] as const).map((k) => {
+              const g = l180[k] ?? {};
+              const cell = (r: any) =>
+                r ? `${r.winRate}% (${r.winRatio})` : "-";
+              return (
+                <tr key={k}>
+                  <td className="muted">{k === "goodTrack" ? "良" : "湿"}</td>
+                  <td>{cell(g.rate1)}</td>
+                  <td>{cell(g.rate2)}</td>
+                  <td>{cell(g.rate3)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Section>
+
+      <Section title="直近成績">
+        {recent.length === 0 ? (
+          <p className="muted">データなし</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>グレード</th>
+                <th>場</th>
+                <th>日付</th>
+                <th>R</th>
+                <th>種別</th>
+                <th>着</th>
+                <th>試走T</th>
+                <th>競走T</th>
+                <th>ST</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((r: any, i: number) => (
+                <tr key={i}>
+                  <td>{r.gradeName}</td>
+                  <td>{r.placeName}</td>
+                  <td>{r.raceDate}</td>
+                  <td>{r.raceNo}</td>
+                  <td>{r.raceType}</td>
+                  <td>{r.order}</td>
+                  <td>{r.traialTime}</td>
+                  <td>{r.raceTime}</td>
+                  <td>{r.st}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      <Section title="獲得タイトル">
+        {titles.length === 0 ? (
+          <p className="muted">データなし</p>
+        ) : (
+          titles.map((g: any, i: number) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <strong>{g.gradeName}</strong>（{g.gradeWinCount}回）
+              <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
+                {(g.titleList ?? []).map((t: any, j: number) => (
+                  <li key={j}>
+                    {t.paragraphName} {t.yearList?.join("・")}（{t.paragraphWinCount}回）
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        )}
+      </Section>
+
+      <Section title="今後の出場予定">
+        {schedule.length === 0 ? (
+          <p className="muted">データなし</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>グレード</th>
+                <th>場</th>
+                <th>期間</th>
+                <th>タイトル</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((s: any, i: number) => (
+                <tr key={i}>
+                  <td>{s.gradeName}</td>
+                  <td>{s.placeName}</td>
+                  <td>
+                    {s.startDate}〜{s.endDate}
+                    {s.status ? `（${s.status}）` : ""}
+                  </td>
+                  <td>{s.title}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
     </div>
   );
 }
