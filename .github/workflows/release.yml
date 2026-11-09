@@ -17,6 +17,9 @@ jobs:
           - os: ubuntu-22.04
           - os: windows-latest
           - os: macos-latest
+            macarch: aarch64
+          - os: macos-13
+            macarch: x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +49,15 @@ jobs:
           # Optional: updater artifact signing. Leave unset to skip .sig generation.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Tag macOS updater artifact with arch
+        if: runner.os == 'macOS'
+        run: |
+          find src-tauri/target/release/bundle -name '*.app.tar.gz' | while read -r f; do
+            base="${f%.tar.gz}"
+            mv "$f" "${base}.${{ matrix.macarch }}.tar.gz"
+            [ -f "$f.sig" ] && mv "$f.sig" "${base}.${{ matrix.macarch }}.tar.gz.sig"
+          done
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

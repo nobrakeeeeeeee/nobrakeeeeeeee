@@ -77,13 +77,21 @@ def main() -> int:
     if artifact:
         add_platform(platforms, directory, "windows-x86_64", artifact, version, base_url, "x64-setup.exe")
 
-    # macOS updater bundle is <App>.app.tar.gz; filenames don't carry the
-    # arch. The release matrix currently builds macos-latest (arm64) only,
-    # so map it to darwin-aarch64. If an Intel macOS target is added,
-    # distinguish by runner/arch here.
-    artifact = find_artifact(directory, ".app.tar.gz")
-    if artifact:
-        add_platform(platforms, directory, "darwin-aarch64", artifact, version, base_url, "aarch64.app.tar.gz")
+    # macOS updater bundles are <App>.app.tar.gz; the release workflow
+    # renames them to <App>.<arch>.app.tar.gz so arm64/x64 don't collide.
+    for name in sorted(os.listdir(directory)):
+        # Matches both <App>.app.tar.gz and <App>.app.<arch>.tar.gz while
+        # excluding unrelated tarballs like deb's data.tar.gz.
+        if not (name.endswith(".tar.gz") and ".app." in name):
+            continue
+        if ".aarch64." in name:
+            key, suffix = "darwin-aarch64", "aarch64.app.tar.gz"
+        elif ".x86_64." in name:
+            key, suffix = "darwin-x86_64", "x64.app.tar.gz"
+        else:
+            # Back-compat: untagged artifact comes from the arm64 runner.
+            key, suffix = "darwin-aarch64", "aarch64.app.tar.gz"
+        add_platform(platforms, directory, key, os.path.join(directory, name), version, base_url, suffix)
 
     if not platforms:
         print("no updater artifacts found", file=sys.stderr)
