@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Hold, type RaceDetail as RaceDetailData, type RefundRow } from "../api";
+import { api, type Hold, type OddsMeta, type OddsRow, type RaceDetail as RaceDetailData, type RefundRow } from "../api";
 import type { RaceSelection } from "../App";
 
 const PLACES: [number, string][] = [
@@ -193,6 +193,7 @@ function RaceDetailView({ detail, raceNo }: { detail: RaceDetailData; raceNo: nu
         </>
       )}
       {detail.refunds.length > 0 && <RefundsView refunds={detail.refunds} />}
+      {detail.odds.length > 0 && <OddsView odds={detail.odds} meta={detail.odds_meta} />}
       <h3>出走表</h3>
       {detail.entries.length === 0 ? (
         <p className="muted">出走表データなし</p>
@@ -289,6 +290,89 @@ function RefundsView({ refunds }: { refunds: RefundRow[] }) {
           )}
         </tbody>
       </table>
+    </>
+  );
+}
+
+const EXPECT_LABELS: [string, string][] = [
+  ["sunny", "晴天"],
+  ["rain", "雨天"],
+  ["st", "ST"],
+  ["ai", "AI"],
+];
+
+function OddsView({ odds, meta }: { odds: OddsRow[]; meta: OddsMeta | null }) {
+  const groups = new Map<string, OddsRow[]>();
+  for (const o of odds) {
+    const list = groups.get(o.bet_type) ?? [];
+    list.push(o);
+    groups.set(o.bet_type, list);
+  }
+  const ordered = [
+    ...BET_LABELS.map(([k]) => k).filter((k) => groups.has(k)),
+    ...[...groups.keys()].filter((k) => !BET_LABELS.some(([bk]) => bk === k)),
+  ];
+  const labelOf = (k: string) => BET_LABELS.find(([bk]) => bk === k)?.[1] ?? k;
+  const [tab, setTab] = useState(ordered[0] ?? "tns");
+  const rows = groups.get(tab) ?? [];
+
+  const expects = meta?.expect && typeof meta.expect === "object" ? meta.expect : null;
+  const sales = meta?.sales && typeof meta.sales === "object" ? meta.sales : null;
+
+  return (
+    <>
+      <h3>オッズ</h3>
+      {meta?.comment && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{meta.comment}</p>}
+      {expects && (
+        <div className="card-meta" style={{ marginBottom: 8 }}>
+          {EXPECT_LABELS.map(([key, label]) => {
+            const v = expects[key];
+            const text = Array.isArray(v) ? v.join("、") : typeof v === "string" ? v : "";
+            return text ? <span key={key} style={{ marginRight: 12 }}>{label}: {text}</span> : null;
+          })}
+        </div>
+      )}
+      <div className="race-tabs">
+        {ordered.map((k) => (
+          <button
+            key={k}
+            className={tab === k ? "chip active" : "chip"}
+            onClick={() => setTab(k)}
+          >
+            {labelOf(k)}
+          </button>
+        ))}
+      </div>
+      <div className="odds-table">
+        <table>
+          <thead>
+            <tr>
+              <th>人気</th>
+              <th>買い目</th>
+              <th>オッズ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((o, i) => (
+              <tr key={`${o.bet_type}-${o.combo}-${i}`}>
+                <td>{i + 1}</td>
+                <td>{o.combo.split("-").join(" → ")}</td>
+                <td>{o.odds}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {sales && (
+        <p className="muted" style={{ fontSize: "0.85em" }}>
+          {typeof sales.updateDate === "string" && `更新: ${sales.updateDate} / `}
+          {BET_LABELS.map(([k]) => {
+            const s = sales[k];
+            const n = s && typeof s === "object" ? s.salesCount : null;
+            return n != null ? `${labelOf(k)} ${Number(n).toLocaleString()}票 ` : null;
+          })}
+        </p>
+      )}
     </>
   );
 }

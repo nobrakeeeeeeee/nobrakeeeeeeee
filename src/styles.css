@@ -224,6 +224,12 @@ button.link {
   margin-bottom: 12px;
 }
 
+.odds-table {
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

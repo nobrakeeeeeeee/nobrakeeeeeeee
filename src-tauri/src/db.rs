@@ -26,6 +26,52 @@ fn ov(v: &Value, key: &str) -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
+/// Recursively flatten a nested odds object into (combo, odds_text, sort_value).
+/// Leaf values are either a scalar odds string or a {min, max} range object.
+fn flatten_odds(node: &Value, prefix: &mut Vec<String>, out: &mut Vec<(String, String, f64)>) {
+    match node {
+        Value::Object(map) => {
+            if map.contains_key("min") || map.contains_key("max") {
+                let min = map.get("min").and_then(|v| v.as_str()).unwrap_or("0");
+                let max = map.get("max").and_then(|v| v.as_str()).unwrap_or("0");
+                let min_f = min.parse::<f64>().unwrap_or(0.0);
+                let max_f = max.parse::<f64>().unwrap_or(0.0);
+                let sort = if min_f > 0.0 { min_f } else { max_f };
+                out.push((prefix.join("-"), format!("{min}-{max}"), sort));
+            } else {
+                for (k, v) in map {
+                    prefix.push(k.clone());
+                    flatten_odds(v, prefix, out);
+                    prefix.pop();
+                }
+            }
+        }
+        Value::String(s) => {
+            let num = s.parse::<f64>().unwrap_or(0.0);
+            out.push((prefix.join("-"), s.clone(), num));
+        }
+        Value::Number(n) => {
+            let s = n.to_string();
+            out.push((prefix.join("-"), s.clone(), n.as_f64().unwrap_or(0.0)));
+        }
+        _ => {}
+    }
+}
+
+/// Normalize combo ordering for unordered bet types (rfw, wid).
+fn normalize_combo(bet_type: &str, combo: &str) -> String {
+    if matches!(bet_type, "rfw" | "wid") {
+        let mut parts: Vec<i64> = combo
+            .split('-')
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        parts.sort_unstable();
+        parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("-")
+    } else {
+        combo.to_string()
+    }
+}
+
 impl Db {
     pub fn open(path: &Path) -> Result<Self, String> {
         if let Some(dir) = path.parent() {
@@ -147,6 +193,30 @@ impl Db {
                     grade_name TEXT,
                     title TEXT,
                     paragraphday INTEGER,
+                    fetched_at TEXT NOT NULL,
+                    PRIMARY KEY (place_code, race_date, race_no)
+                );
+                CREATE TABLE IF NOT EXISTS race_odds (
+                    place_code INTEGER NOT NULL,
+                    race_date TEXT NOT NULL,
+                    race_no INTEGER NOT NULL,
+                    bet_type TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    combo TEXT NOT NULL,
+                    odds TEXT NOT NULL,
+                    sort_odds REAL NOT NULL,
+                    fetched_at TEXT NOT NULL,
+                    PRIMARY KEY (place_code, race_date, race_no, bet_type, combo)
+                );
+                CREATE TABLE IF NOT EXISTS race_odds_meta (
+                    place_code INTEGER NOT NULL,
+                    race_date TEXT NOT NULL,
+                    race_no INTEGER NOT NULL,
+                    sales_json TEXT,
+                    expect_json TEXT,
+                    pop_json TEXT,
+                    player_stats_json TEXT,
+                    comment TEXT,
                     fetched_at TEXT NOT NULL,
                     PRIMARY KEY (place_code, race_date, race_no)
                 );
@@ -475,6 +545,142 @@ impl Db {
             })
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    // ---------- race odds ----------
+
+    /// Persist odds for all bet types plus per-race meta (sales/expect/pop/player stats).
+    /// Returns the number of odds rows written.
+    pub fn save_race_odds(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+        body: &Value,
+    ) -> Result<usize, String> {
+        const BET_TYPES: [&str; 7] = ["tns", "fns", "rtw", "rfw", "rt3", "rf3", "wid"];
+        let mut count = 0;
+        for bet_type in BET_TYPES {
+            let key = format!("{}OddsList", bet_type);
+            let Some(list) = body.get(&key) else { continue };
+            let mut flat = Vec::new();
+            flatten_odds(list, &mut Vec::new(), &mut flat);
+            flat.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+            for (seq, (combo, odds, sort)) in flat.iter().enumerate() {
+                let combo = normalize_combo(bet_type, combo);
+                self.conn
+                    .execute(
+                        "INSERT INTO race_odds (place_code, race_date, race_no, bet_type,
+                            seq, combo, odds, sort_odds, fetched_at)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                         ON CONFLICT(place_code, race_date, race_no, bet_type, combo)
+                         DO UPDATE SET seq=excluded.seq, odds=excluded.odds,
+                            sort_odds=excluded.sort_odds, fetched_at=excluded.fetched_at",
+                        params![
+                            place_code, race_date, race_no, bet_type,
+                            seq as i64, combo, odds, sort, Self::now(),
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                count += 1;
+            }
+        }
+
+        let json_or_null = |k: &str| -> Option<String> {
+            body.get(k).map(|v| v.to_string())
+        };
+        self.conn
+            .execute(
+                "INSERT INTO race_odds_meta (place_code, race_date, race_no,
+                    sales_json, expect_json, pop_json, player_stats_json, comment, fetched_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                 ON CONFLICT(place_code, race_date, race_no) DO UPDATE SET
+                    sales_json=excluded.sales_json, expect_json=excluded.expect_json,
+                    pop_json=excluded.pop_json, player_stats_json=excluded.player_stats_json,
+                    comment=excluded.comment, fetched_at=excluded.fetched_at",
+                params![
+                    place_code,
+                    race_date,
+                    race_no,
+                    json_or_null("salesInfo"),
+                    json_or_null("expectInfo"),
+                    json_or_null("popInfo"),
+                    json_or_null("playerList"),
+                    ov(body, "comment"),
+                    Self::now(),
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(count)
+    }
+
+    pub fn odds_for_race(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+    ) -> Result<Vec<OddsRow>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT bet_type, seq, combo, odds, sort_odds
+                 FROM race_odds
+                 WHERE place_code=?1 AND race_date=?2 AND race_no=?3
+                 ORDER BY bet_type, sort_odds, combo",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![place_code, race_date, race_no], |r| {
+                Ok(OddsRow {
+                    bet_type: r.get(0)?,
+                    seq: r.get(1)?,
+                    combo: r.get(2)?,
+                    odds: r.get(3)?,
+                    sort_odds: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn odds_meta_for_race(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+    ) -> Result<Option<OddsMeta>, String> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT sales_json, expect_json, pop_json, player_stats_json, comment
+                 FROM race_odds_meta
+                 WHERE place_code=?1 AND race_date=?2 AND race_no=?3",
+                params![place_code, race_date, race_no],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                        r.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let Some((sales, expect, pop, stats, comment)) = row else {
+            return Ok(None);
+        };
+        let parse = |s: Option<String>| -> Value {
+            s.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null)
+        };
+        Ok(Some(OddsMeta {
+            sales: parse(sales),
+            expect: parse(expect),
+            pop: parse(pop),
+            player_stats: parse(stats),
+            comment,
+        }))
     }
 
     // ---------- race info ----------
@@ -874,6 +1080,64 @@ mod tests {
         let tns = refunds.iter().find(|r| r.bet_type == "tns").unwrap();
         assert_eq!(tns.finish_order, Some(1));
         assert_eq!(tns.type_name.as_deref(), Some("通常"));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn odds_roundtrip() {
+        let path = std::env::temp_dir().join(format!("nobrake_odds_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = Db::open(&path).unwrap();
+
+        let body = json!({
+            "tnsOddsList": {"1": "43.9", "4": "12.3"},
+            "fnsOddsList": {"1": {"min": "1.0", "max": "1.2"}},
+            "rtwOddsList": {"1": {"2": "791.3", "4": "1582"}},
+            "rfwOddsList": {"4": {"1": "85.2"}, "1": {"4": "85.2"}},
+            "rt3OddsList": {"1": {"2": {"3": "5361"}}},
+            "widOddsList": {"4": {"1": {"min": "25.7", "max": "35.9"}}},
+            "salesInfo": {"updateDate": "2026-11-10 02:43:24", "rtw": {"salesCount": 4522}},
+            "expectInfo": {"sunny": ["7=4-8"]},
+            "popInfo": {"rt3": [{"no1": "7", "no2": "4", "no3": "8", "odds": "8.8"}]},
+            "playerList": [{"carNo": 1, "stAve": "0.23"}],
+            "comment": "テストコメント"
+        });
+        let n = db.save_race_odds(2, "2026-11-08", 1, &body).unwrap();
+        assert_eq!(n, 9);
+
+        let odds = db.odds_for_race(2, "2026-11-08", 1).unwrap();
+        // rfw の "1-4"/"4-1" は正規化で同一PKにupsertされるため8行
+        assert_eq!(odds.len(), 8);
+
+        // 単勝: sort_odds昇順で "4"(12.3) が "1"(43.9) より先
+        let tns: Vec<_> = odds.iter().filter(|o| o.bet_type == "tns").collect();
+        assert_eq!(tns[0].combo, "4");
+        assert_eq!(tns[0].odds, "12.3");
+
+        // 2連複は無順序正規化で "1-4" に統一される
+        let rfw: Vec<_> = odds.iter().filter(|o| o.bet_type == "rfw").collect();
+        assert_eq!(rfw.len(), 1);
+        assert_eq!(rfw[0].combo, "1-4");
+
+        // ワイドは min-max 表記
+        let wid = odds.iter().find(|o| o.bet_type == "wid").unwrap();
+        assert_eq!(wid.combo, "1-4");
+        assert_eq!(wid.odds, "25.7-35.9");
+
+        // 3連単は順序保持
+        let rt3 = odds.iter().find(|o| o.bet_type == "rt3").unwrap();
+        assert_eq!(rt3.combo, "1-2-3");
+
+        let meta = db.odds_meta_for_race(2, "2026-11-08", 1).unwrap().unwrap();
+        assert_eq!(meta.comment.as_deref(), Some("テストコメント"));
+        assert_eq!(meta.sales["rtw"]["salesCount"], json!(4522));
+        assert_eq!(meta.expect["sunny"][0], json!("7=4-8"));
+        assert_eq!(meta.player_stats[0]["stAve"], json!("0.23"));
+
+        // upsertで重複しない
+        db.save_race_odds(2, "2026-11-08", 1, &body).unwrap();
+        assert_eq!(db.odds_for_race(2, "2026-11-08", 1).unwrap().len(), 8);
 
         let _ = std::fs::remove_file(&path);
     }

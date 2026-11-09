@@ -83,12 +83,30 @@ export interface RefundRow {
   type_name: string | null;
 }
 
+export interface OddsRow {
+  bet_type: string;
+  seq: number;
+  combo: string;
+  odds: string;
+  sort_odds: number;
+}
+
+export interface OddsMeta {
+  sales: any;
+  expect: any;
+  pop: any;
+  player_stats: any;
+  comment: string | null;
+}
+
 export interface RaceDetail {
   hold: Hold | null;
   infos: RaceInfo[];
   entries: Entry[];
   results: RaceResultRow[];
   refunds: RefundRow[];
+  odds: OddsRow[];
+  odds_meta: OddsMeta | null;
 }
 
 export interface PlayerRow {
@@ -119,6 +137,7 @@ export interface CollectReport {
   entries_saved: number;
   results_saved: number;
   infos_saved: number;
+  odds_saved: number;
   errors: string[];
 }
 

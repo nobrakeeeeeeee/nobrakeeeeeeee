@@ -207,6 +207,8 @@ pub async fn race_detail(
         entries: db.entries_for_race(place_code, &race_date, race_no)?,
         results: db.results_for_race(place_code, &race_date, race_no)?,
         refunds: db.refunds_for_race(place_code, &race_date, race_no)?,
+        odds: db.odds_for_race(place_code, &race_date, race_no)?,
+        odds_meta: db.odds_meta_for_race(place_code, &race_date, race_no)?,
     })
 }
 
@@ -226,6 +228,7 @@ async fn collect_one_day(
         entries_saved: 0,
         results_saved: 0,
         infos_saved: 0,
+        odds_saved: 0,
         errors: Vec::new(),
     };
 
@@ -353,6 +356,30 @@ async fn collect_one_day(
                 emit(format!("R{race_no}: no result yet"));
             }
             Err(e) => report.errors.push(format!("RaceResult R{race_no}: {e}")),
+        }
+
+        // Odds (available for ~1 month after the race; 4101 = not held / expired)
+        match state
+            .api
+            .post(
+                "/race_info/Odds",
+                &json!({ "placeCode": place_code, "raceDate": race_date, "raceNo": race_no }),
+            )
+            .await
+        {
+            Ok(body) => {
+                let n = state
+                    .db
+                    .lock()
+                    .unwrap()
+                    .save_race_odds(place_code, &race_date, race_no, &body)?;
+                report.odds_saved += n as i64;
+                emit(format!("R{race_no}: odds ok ({n} combos)"));
+            }
+            Err(ApiError::Api { code, .. }) if code == "4101" => {
+                emit(format!("R{race_no}: no odds"));
+            }
+            Err(e) => report.errors.push(format!("Odds R{race_no}: {e}")),
         }
     }
 

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hold {
@@ -88,12 +89,32 @@ pub struct RefundRow {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct OddsRow {
+    pub bet_type: String,
+    pub seq: i64,
+    pub combo: String,
+    pub odds: String,
+    pub sort_odds: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OddsMeta {
+    pub sales: Value,
+    pub expect: Value,
+    pub pop: Value,
+    pub player_stats: Value,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct RaceDetail {
     pub hold: Option<Hold>,
     pub infos: Vec<RaceInfo>,
     pub entries: Vec<Entry>,
     pub results: Vec<RaceResultRow>,
     pub refunds: Vec<RefundRow>,
+    pub odds: Vec<OddsRow>,
+    pub odds_meta: Option<OddsMeta>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -127,5 +148,6 @@ pub struct CollectReport {
     pub entries_saved: i64,
     pub results_saved: i64,
     pub infos_saved: i64,
+    pub odds_saved: i64,
     pub errors: Vec<String>,
 }

@@ -136,7 +136,8 @@ export default function Collect() {
           <div>
             {report.race_date} (place {report.place_code}): R{report.races_attempted}試行 /
             プログラム {report.programs_saved} / 出走 {report.entries_saved} /
-            結果 {report.results_saved} / レース情報 {report.infos_saved}
+            結果 {report.results_saved} / レース情報 {report.infos_saved} /
+            オッズ {report.odds_saved}
           </div>
           {report.errors.length > 0 && (
             <ul className="error-list">
