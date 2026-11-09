@@ -577,6 +577,14 @@ pub async fn player_detail(
 }
 
 #[tauri::command]
+pub async fn search_races(
+    state: State<'_, AppState>,
+    query: RaceSearchQuery,
+) -> Result<Vec<RaceSearchRow>, String> {
+    state.db.lock().unwrap().search_races(&query)
+}
+
+#[tauri::command]
 pub async fn db_stats(state: State<'_, AppState>) -> Result<Value, String> {
     let db = state.db.lock().unwrap();
     let holds = db.list_holds(10000)?.len() as i64;

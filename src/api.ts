@@ -150,6 +150,32 @@ export interface PlayerStats {
   by_car: PlayerStatGroup[];
 }
 
+export interface RaceSearchRow {
+  place_code: number;
+  place_name: string;
+  race_date: string;
+  race_no: number;
+  title: string;
+  grade_name: string;
+  ord: number;
+  car_no: number | null;
+  player_code: string;
+  player_name: string;
+  race_time: string | null;
+  st: string | null;
+}
+
+export interface RaceSearchQuery {
+  player?: string;
+  place_code?: number;
+  date_from?: string;
+  date_to?: string;
+  ord_min?: number;
+  ord_max?: number;
+  bet_type?: string;
+  min_refund?: number;
+}
+
 export interface CollectReport {
   place_code: number;
   race_date: string;
@@ -187,6 +213,8 @@ export const api = {
   searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),
   playerDetail: (playerCode: string) =>
     invoke<{ profile: any; history: PlayerHistoryRow[]; stats: PlayerStats }>("player_detail", { playerCode }),
+  searchRaces: (query: RaceSearchQuery) =>
+    invoke<RaceSearchRow[]>("search_races", { query }),
   dbStats: () => invoke<{ holds: number; players: number }>("db_stats"),
   onCollectLog: (cb: (msg: string) => void): Promise<UnlistenFn> =>
     listen<string>("collect-log", (e) => cb(e.payload)),

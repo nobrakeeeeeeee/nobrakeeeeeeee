@@ -1042,6 +1042,83 @@ impl Db {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
+    /// Cross-race search over collected results with optional filters.
+    pub fn search_races(&self, q: &RaceSearchQuery) -> Result<Vec<RaceSearchRow>, String> {
+        let mut sql = String::from(
+            "SELECT r.place_code, COALESCE(h.place_name, ''), r.race_date, r.race_no,
+                    COALESCE(h.title, ''), COALESCE(h.grade_name, ''),
+                    r.ord, r.car_no, r.player_code, r.player_name, r.race_time, r.st
+             FROM race_results r
+             LEFT JOIN holds h ON h.place_code = r.place_code AND h.race_date = r.race_date
+             WHERE 1=1",
+        );
+        let mut p: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(player) = q.player.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            sql.push_str(
+                " AND r.player_code IN (SELECT player_code FROM players
+                     WHERE player_code LIKE ? OR player_name LIKE ? OR player_name_kana LIKE ?)",
+            );
+            let like = format!("%{player}%");
+            for _ in 0..3 {
+                p.push(Box::new(like.clone()));
+            }
+        }
+        if let Some(pc) = q.place_code {
+            sql.push_str(" AND r.place_code = ?");
+            p.push(Box::new(pc));
+        }
+        if let Some(d) = q.date_from.as_deref().filter(|s| !s.is_empty()) {
+            sql.push_str(" AND r.race_date >= ?");
+            p.push(Box::new(d.to_string()));
+        }
+        if let Some(d) = q.date_to.as_deref().filter(|s| !s.is_empty()) {
+            sql.push_str(" AND r.race_date <= ?");
+            p.push(Box::new(d.to_string()));
+        }
+        if let Some(o) = q.ord_min {
+            sql.push_str(" AND r.ord >= ?");
+            p.push(Box::new(o));
+        }
+        if let Some(o) = q.ord_max {
+            sql.push_str(" AND r.ord <= ?");
+            p.push(Box::new(o));
+        }
+        if let (Some(bt), Some(min)) = (q.bet_type.as_deref(), q.min_refund) {
+            if !bt.is_empty() {
+                sql.push_str(
+                    " AND EXISTS (SELECT 1 FROM race_refunds rf
+                         WHERE rf.place_code = r.place_code AND rf.race_date = r.race_date
+                           AND rf.race_no = r.race_no AND rf.bet_type = ? AND rf.refund >= ?)",
+                );
+                p.push(Box::new(bt.to_string()));
+                p.push(Box::new(min));
+            }
+        }
+        sql.push_str(" ORDER BY r.race_date DESC, r.place_code, r.race_no, r.ord LIMIT 1000");
+
+        let mut stmt = self.conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(p.iter()), |r| {
+                Ok(RaceSearchRow {
+                    place_code: r.get(0)?,
+                    place_name: r.get(1)?,
+                    race_date: r.get(2)?,
+                    race_no: r.get(3)?,
+                    title: r.get(4)?,
+                    grade_name: r.get(5)?,
+                    ord: r.get(6)?,
+                    car_no: r.get(7)?,
+                    player_code: r.get(8)?,
+                    player_name: r.get(9)?,
+                    race_time: r.get(10)?,
+                    st: r.get(11)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
     pub fn player_count(&self) -> Result<i64, String> {
         self.conn
             .query_row("SELECT COUNT(*) FROM players", [], |r| r.get(0))

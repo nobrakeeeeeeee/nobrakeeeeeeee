@@ -3,16 +3,18 @@ import Today from "./views/Today";
 import Holds from "./views/Holds";
 import Players from "./views/Players";
 import Collect from "./views/Collect";
+import Search from "./views/Search";
 import { checkForUpdate, installAndRelaunch } from "./updater";
 import type { Update } from "@tauri-apps/plugin-updater";
 
-type Tab = "today" | "holds" | "players" | "collect";
+type Tab = "today" | "holds" | "players" | "search" | "collect";
 
 export interface RaceSelection {
   placeCode: number;
   placeName: string;
   raceDate: string;
   title: string;
+  raceNo?: number;
 }
 
 export default function App() {
@@ -53,6 +55,7 @@ export default function App() {
               ["today", "本日の開催"],
               ["holds", "開催・レース"],
               ["players", "選手"],
+              ["search", "検索"],
               ["collect", "データ収集"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -78,6 +81,7 @@ export default function App() {
         {tab === "today" && <Today onOpenRace={openRace} />}
         {tab === "holds" && <Holds initial={sel} />}
         {tab === "players" && <Players />}
+        {tab === "search" && <Search onOpenRace={openRace} />}
         {tab === "collect" && <Collect />}
       </main>
     </div>

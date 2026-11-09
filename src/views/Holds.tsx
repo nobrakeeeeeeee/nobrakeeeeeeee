@@ -37,7 +37,7 @@ export default function Holds({ initial }: Props) {
 
   useEffect(() => {
     if (!selected) return;
-    setRaceNo(null);
+    setRaceNo(selected.raceNo ?? null);
     setDetail(null);
     api
       .raceNumbers(selected.placeCode, selected.raceDate)

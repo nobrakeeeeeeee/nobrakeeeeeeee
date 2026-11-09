@@ -162,6 +162,34 @@ pub struct PlayerHistoryRow {
     pub accident_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct RaceSearchQuery {
+    pub player: Option<String>,
+    pub place_code: Option<i64>,
+    pub date_from: Option<String>,
+    pub date_to: Option<String>,
+    pub ord_min: Option<i64>,
+    pub ord_max: Option<i64>,
+    pub bet_type: Option<String>,
+    pub min_refund: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RaceSearchRow {
+    pub place_code: i64,
+    pub place_name: String,
+    pub race_date: String,
+    pub race_no: i64,
+    pub title: String,
+    pub grade_name: String,
+    pub ord: i64,
+    pub car_no: Option<i64>,
+    pub player_code: String,
+    pub player_name: String,
+    pub race_time: Option<String>,
+    pub st: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CollectReport {
     pub place_code: i64,

@@ -39,6 +39,7 @@ pub fn run() {
             commands::sync_players,
             commands::search_players,
             commands::player_detail,
+            commands::search_races,
             commands::db_stats,
         ])
         .run(tauri::generate_context!())
