@@ -42,6 +42,9 @@ pub fn run() {
             commands::search_players,
             commands::player_detail,
             commands::search_races,
+            commands::toggle_favorite,
+            commands::favorite_players,
+            commands::save_race_memo,
             commands::db_stats,
         ])
         .run(tauri::generate_context!())

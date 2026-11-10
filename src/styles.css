@@ -246,6 +246,50 @@ button.link {
   align-self: center;
 }
 
+.chip.fav {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 6px;
+  align-self: center;
+}
+
+.chip.fav.on {
+  color: #f5c542;
+}
+
+.fav-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.memo-input {
+  width: 100%;
+  max-width: 640px;
+  background: #14171c;
+  color: #e6e9ef;
+  border: 1px solid #2c3240;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.ord-chart {
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  background: #0e1013;
+  border: 1px solid #2c3240;
+  border-radius: 6px;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

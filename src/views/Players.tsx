@@ -8,6 +8,8 @@ export default function Players() {
   const [profile, setProfile] = useState<any>(null);
   const [history, setHistory] = useState<PlayerHistoryRow[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [favOnly, setFavOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -15,11 +17,42 @@ export default function Players() {
 
   const search = async (q: string) => {
     try {
-      setResults(await api.searchPlayers(q.trim()));
+      setResults(
+        favOnly ? await api.favoritePlayers() : await api.searchPlayers(q.trim())
+      );
     } catch (e) {
       setError(String(e));
     }
   };
+
+  const loadFavs = async () => {
+    try {
+      const ps = await api.favoritePlayers();
+      setFavs(new Set(ps.map((p) => p.player_code)));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const toggleFav = async (code: string) => {
+    try {
+      const now = await api.toggleFavorite(code);
+      setFavs((prev) => {
+        const s = new Set(prev);
+        if (now) s.add(code);
+        else s.delete(code);
+        return s;
+      });
+      if (favOnly) search("");
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  useEffect(() => {
+    loadFavs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -28,7 +61,7 @@ export default function Players() {
       if (timer.current) window.clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, favOnly]);
 
   const openPlayer = async (p: PlayerRow) => {
     setSelected(p);
@@ -75,22 +108,40 @@ export default function Players() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <label className="fav-filter">
+          <input
+            type="checkbox"
+            checked={favOnly}
+            onChange={(e) => setFavOnly(e.target.checked)}
+          />
+          お気に入りのみ
+        </label>
         <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
-          空欄のままにすると全選手をコード順に一覧表示します。
+          {favOnly
+            ? "お気に入り登録した選手を表示しています。"
+            : "空欄のままにすると全選手をコード順に一覧表示します。"}
         </p>
         {error && <p className="error">{error}</p>}
         <div className="player-list">
           {results.map((p) => (
-            <button
-              key={p.player_code}
-              className={
-                selected?.player_code === p.player_code ? "hold-item active" : "hold-item"
-              }
-              onClick={() => openPlayer(p)}
-            >
-              <span className="hold-place">{p.player_code}</span>
-              {p.player_name} <span className="muted">{p.player_name_kana}</span>
-            </button>
+            <div key={p.player_code} className="hold-row">
+              <button
+                className={
+                  selected?.player_code === p.player_code ? "hold-item active" : "hold-item"
+                }
+                onClick={() => openPlayer(p)}
+              >
+                <span className="hold-place">{p.player_code}</span>
+                {p.player_name} <span className="muted">{p.player_name_kana}</span>
+              </button>
+              <button
+                className={favs.has(p.player_code) ? "chip fav on" : "chip fav"}
+                title="お気に入り"
+                onClick={() => toggleFav(p.player_code)}
+              >
+                {favs.has(p.player_code) ? "★" : "☆"}
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -102,7 +153,14 @@ export default function Players() {
               {selected.player_name}{" "}
               <span className="muted">
                 {selected.player_code} / {selected.player_name_kana}
-              </span>
+              </span>{" "}
+              <button
+                className={favs.has(selected.player_code) ? "chip fav on" : "chip fav"}
+                title="お気に入り"
+                onClick={() => toggleFav(selected.player_code)}
+              >
+                {favs.has(selected.player_code) ? "★" : "☆"}
+              </button>
             </h2>
             {profile == null && <p>読み込み中...</p>}
             {profile != null && <ProfileView profile={profile} />}
@@ -114,6 +172,7 @@ export default function Players() {
             ) : (
               <StatsView stats={stats} />
             )}
+            {history.length >= 2 && <OrdTrendChart history={history} />}
             <h3>収集済み戦績</h3>
             {history.length === 0 ? (
               <p className="muted">収集済みデータなし</p>
@@ -217,6 +276,66 @@ function StatGroupTable({ title, rows }: { title: string; rows: PlayerStatGroup[
         </tbody>
       </table>
     </>
+  );
+}
+
+function OrdTrendChart({ history }: { history: PlayerHistoryRow[] }) {
+  const pts = [...history].reverse().filter((h) => h.ord != null && h.ord > 0);
+  if (pts.length < 2) return null;
+  const W = 640;
+  const H = 120;
+  const padL = 26;
+  const padR = 10;
+  const padT = 10;
+  const padB = 20;
+  const maxOrd = 9;
+  const x = (i: number) =>
+    padL + (pts.length === 1 ? 0 : (i * (W - padL - padR)) / (pts.length - 1));
+  const y = (ord: number) => padT + ((ord - 1) / (maxOrd - 1)) * (H - padT - padB);
+  const line = pts
+    .map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.ord!).toFixed(1)}`)
+    .join(" ");
+  const first = pts[0].race_date.slice(5);
+  const last = pts[pts.length - 1].race_date.slice(5);
+  return (
+    <div style={{ margin: "8px 0 16px" }}>
+      <h4 style={{ margin: "8px 0 4px" }}>着順推移（収集データ・古い順）</h4>
+      <svg viewBox={`0 0 ${W} ${H}`} className="ord-chart">
+        {[1, 3, 6, 9].map((o) => (
+          <g key={o}>
+            <line
+              x1={padL}
+              x2={W - padR}
+              y1={y(o)}
+              y2={y(o)}
+              stroke="#2c3240"
+              strokeWidth={1}
+            />
+            <text x={4} y={y(o) + 3} fontSize={9} fill="#9aa3b2">
+              {o}
+            </text>
+          </g>
+        ))}
+        <path d={line} fill="none" stroke="#6ea8fe" strokeWidth={1.5} />
+        {pts.map((p, i) => (
+          <circle
+            key={i}
+            cx={x(i)}
+            cy={y(p.ord!)}
+            r={p.ord! <= 3 ? 3.5 : 2.5}
+            fill={p.ord! <= 3 ? "#7ee2a8" : "#6ea8fe"}
+          >
+            <title>{`${p.race_date} ${p.place_code} ${p.race_no}R ${p.ord}着`}</title>
+          </circle>
+        ))}
+        <text x={padL} y={H - 4} fontSize={9} fill="#9aa3b2">
+          {first}
+        </text>
+        <text x={W - padR} y={H - 4} fontSize={9} fill="#9aa3b2" textAnchor="end">
+          {last}
+        </text>
+      </svg>
+    </div>
   );
 }
 

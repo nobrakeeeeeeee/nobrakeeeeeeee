@@ -220,6 +220,18 @@ impl Db {
                     fetched_at TEXT NOT NULL,
                     PRIMARY KEY (place_code, race_date, race_no)
                 );
+                CREATE TABLE IF NOT EXISTS player_favorites (
+                    player_code TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS race_memos (
+                    place_code INTEGER NOT NULL,
+                    race_date TEXT NOT NULL,
+                    race_no INTEGER NOT NULL,
+                    memo TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (place_code, race_date, race_no)
+                );
                 CREATE TABLE IF NOT EXISTS players (
                     player_code TEXT PRIMARY KEY,
                     player_name TEXT,
@@ -1117,6 +1129,107 @@ impl Db {
             })
             .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    // ---------- favorites & memos ----------
+
+    /// Toggle a player's favorite flag; returns the new state.
+    pub fn toggle_favorite(&self, player_code: &str) -> Result<bool, String> {
+        let exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM player_favorites WHERE player_code=?1",
+                params![player_code],
+                |r| r.get::<_, i64>(0).map(|n| n > 0),
+            )
+            .map_err(|e| e.to_string())?;
+        if exists {
+            self.conn
+                .execute(
+                    "DELETE FROM player_favorites WHERE player_code=?1",
+                    params![player_code],
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(false)
+        } else {
+            self.conn
+                .execute(
+                    "INSERT INTO player_favorites (player_code, created_at) VALUES (?1, ?2)",
+                    params![player_code, Self::now()],
+                )
+                .map_err(|e| e.to_string())?;
+            Ok(true)
+        }
+    }
+
+    pub fn favorite_players(&self) -> Result<Vec<PlayerRow>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT p.player_code, p.player_name, p.player_name_kana,
+                        p.place_code, p.place_key
+                 FROM player_favorites f JOIN players p ON p.player_code = f.player_code
+                 ORDER BY p.player_code",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(PlayerRow {
+                    player_code: r.get(0)?,
+                    player_name: r.get(1)?,
+                    player_name_kana: r.get(2)?,
+                    place_code: r.get(3)?,
+                    place_key: r.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn memo_for_race(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+    ) -> Result<Option<String>, String> {
+        self.conn
+            .query_row(
+                "SELECT memo FROM race_memos
+                 WHERE place_code=?1 AND race_date=?2 AND race_no=?3",
+                params![place_code, race_date, race_no],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn save_race_memo(
+        &self,
+        place_code: i64,
+        race_date: &str,
+        race_no: i64,
+        memo: &str,
+    ) -> Result<(), String> {
+        if memo.trim().is_empty() {
+            self.conn
+                .execute(
+                    "DELETE FROM race_memos
+                     WHERE place_code=?1 AND race_date=?2 AND race_no=?3",
+                    params![place_code, race_date, race_no],
+                )
+                .map_err(|e| e.to_string())?;
+        } else {
+            self.conn
+                .execute(
+                    "INSERT INTO race_memos (place_code, race_date, race_no, memo, updated_at)
+                     VALUES (?1,?2,?3,?4,?5)
+                     ON CONFLICT(place_code, race_date, race_no) DO UPDATE SET
+                        memo=excluded.memo, updated_at=excluded.updated_at",
+                    params![place_code, race_date, race_no, memo, Self::now()],
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     pub fn player_count(&self) -> Result<i64, String> {

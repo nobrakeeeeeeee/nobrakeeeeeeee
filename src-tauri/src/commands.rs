@@ -209,6 +209,7 @@ pub async fn race_detail(
         refunds: db.refunds_for_race(place_code, &race_date, race_no)?,
         odds: db.odds_for_race(place_code, &race_date, race_no)?,
         odds_meta: db.odds_meta_for_race(place_code, &race_date, race_no)?,
+        memo: db.memo_for_race(place_code, &race_date, race_no)?,
     })
 }
 
@@ -662,6 +663,34 @@ pub async fn player_detail(
         .player_stats(&player_code)
         .unwrap_or_default();
     Ok(json!({ "profile": profile, "history": history, "stats": stats }))
+}
+
+#[tauri::command]
+pub async fn toggle_favorite(
+    state: State<'_, AppState>,
+    player_code: String,
+) -> Result<bool, String> {
+    state.db.lock().unwrap().toggle_favorite(&player_code)
+}
+
+#[tauri::command]
+pub async fn favorite_players(state: State<'_, AppState>) -> Result<Vec<PlayerRow>, String> {
+    state.db.lock().unwrap().favorite_players()
+}
+
+#[tauri::command]
+pub async fn save_race_memo(
+    state: State<'_, AppState>,
+    place_code: i64,
+    race_date: String,
+    race_no: i64,
+    memo: String,
+) -> Result<(), String> {
+    state
+        .db
+        .lock()
+        .unwrap()
+        .save_race_memo(place_code, &race_date, race_no, &memo)
 }
 
 #[tauri::command]

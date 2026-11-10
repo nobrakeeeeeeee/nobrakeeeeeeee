@@ -93,6 +93,25 @@ export default function Holds({ initial }: Props) {
     }
   };
 
+  // Sorted flat list for prev/next hold navigation
+  const sortedHolds = [...holds].sort(
+    (a, b) => a.race_date.localeCompare(b.race_date) || a.place_code - b.place_code
+  );
+  const selIdx = selected
+    ? sortedHolds.findIndex(
+        (h) => h.place_code === selected.placeCode && h.race_date === selected.raceDate
+      )
+    : -1;
+  const prevHold = selIdx > 0 ? sortedHolds[selIdx - 1] : null;
+  const nextHold = selIdx >= 0 && selIdx < sortedHolds.length - 1 ? sortedHolds[selIdx + 1] : null;
+  const goHold = (h: Hold) =>
+    setSelected({
+      placeCode: h.place_code,
+      placeName: h.place_name,
+      raceDate: h.race_date,
+      title: `${h.place_name} ${h.race_date} ${h.title}`,
+    });
+
   // Group holds by date
   const byDate = new Map<string, Hold[]>();
   for (const h of holds) {
@@ -160,7 +179,25 @@ export default function Holds({ initial }: Props) {
         {!selected && <p className="muted">左の一覧から開催日を選択してください。</p>}
         {selected && (
           <>
-            <h2>{selected.title}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                className="chip"
+                disabled={!prevHold}
+                onClick={() => prevHold && goHold(prevHold)}
+                title={prevHold ? `${prevHold.place_name} ${prevHold.race_date}` : "前の開催なし"}
+              >
+                ‹ 前
+              </button>
+              <h2 style={{ margin: 0, flex: 1 }}>{selected.title}</h2>
+              <button
+                className="chip"
+                disabled={!nextHold}
+                onClick={() => nextHold && goHold(nextHold)}
+                title={nextHold ? `${nextHold.place_name} ${nextHold.race_date}` : "次の開催なし"}
+              >
+                次 ›
+              </button>
+            </div>
             {raceNos.length === 0 && !loading && (
               <p className="muted">この日のデータは未収集です。「データ収集」タブから収集してください。</p>
             )}
@@ -177,7 +214,13 @@ export default function Holds({ initial }: Props) {
             </div>
             {loading && <p>読み込み中...</p>}
             {detail && raceNo != null && (
-              <RaceDetailView detail={detail} raceNo={raceNo} onRefreshOdds={refreshOdds} />
+              <RaceDetailView
+                detail={detail}
+                raceNo={raceNo}
+                placeCode={selected.placeCode}
+                raceDate={selected.raceDate}
+                onRefreshOdds={refreshOdds}
+              />
             )}
           </>
         )}
@@ -189,10 +232,14 @@ export default function Holds({ initial }: Props) {
 function RaceDetailView({
   detail,
   raceNo,
+  placeCode,
+  raceDate,
   onRefreshOdds,
 }: {
   detail: RaceDetailData;
   raceNo: number;
+  placeCode: number;
+  raceDate: string;
   onRefreshOdds: () => Promise<void>;
 }) {
   const info = detail.infos.find((i) => i.race_no === raceNo);
@@ -278,6 +325,61 @@ function RaceDetailView({
           </tbody>
         </table>
       )}
+      <MemoView
+        key={`${placeCode}-${raceDate}-${raceNo}`}
+        placeCode={placeCode}
+        raceDate={raceDate}
+        raceNo={raceNo}
+        memo={detail.memo}
+      />
+    </div>
+  );
+}
+
+function MemoView({
+  placeCode,
+  raceDate,
+  raceNo,
+  memo,
+}: {
+  placeCode: number;
+  raceDate: string;
+  raceNo: number;
+  memo: string | null;
+}) {
+  const [text, setText] = useState(memo ?? "");
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveRaceMemo(placeCode, raceDate, raceNo, text);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <h3>メモ</h3>
+      <textarea
+        className="memo-input"
+        placeholder="このレースのメモを入力..."
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setSaved(false);
+        }}
+        rows={3}
+      />
+      <button className="chip" onClick={save} disabled={saving || text === (memo ?? "")}>
+        {saving ? "保存中..." : saved ? "保存しました" : "保存"}
+      </button>
     </div>
   );
 }

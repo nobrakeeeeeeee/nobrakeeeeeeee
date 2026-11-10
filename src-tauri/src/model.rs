@@ -115,6 +115,7 @@ pub struct RaceDetail {
     pub refunds: Vec<RefundRow>,
     pub odds: Vec<OddsRow>,
     pub odds_meta: Option<OddsMeta>,
+    pub memo: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

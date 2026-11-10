@@ -107,6 +107,7 @@ export interface RaceDetail {
   refunds: RefundRow[];
   odds: OddsRow[];
   odds_meta: OddsMeta | null;
+  memo: string | null;
 }
 
 export interface PlayerRow {
@@ -221,6 +222,11 @@ export const api = {
     invoke<{ profile: any; history: PlayerHistoryRow[]; stats: PlayerStats }>("player_detail", { playerCode }),
   searchRaces: (query: RaceSearchQuery) =>
     invoke<RaceSearchRow[]>("search_races", { query }),
+  toggleFavorite: (playerCode: string) =>
+    invoke<boolean>("toggle_favorite", { playerCode }),
+  favoritePlayers: () => invoke<PlayerRow[]>("favorite_players"),
+  saveRaceMemo: (placeCode: number, raceDate: string, raceNo: number, memo: string) =>
+    invoke<void>("save_race_memo", { placeCode, raceDate, raceNo, memo }),
   dbStats: () => invoke<{ holds: number; players: number }>("db_stats"),
   onCollectLog: (cb: (msg: string) => void): Promise<UnlistenFn> =>
     listen<string>("collect-log", (e) => cb(e.payload)),
