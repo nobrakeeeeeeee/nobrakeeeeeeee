@@ -230,6 +230,22 @@ button.link {
   margin-bottom: 8px;
 }
 
+.hold-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.hold-row .hold-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.hold-row .recollect {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

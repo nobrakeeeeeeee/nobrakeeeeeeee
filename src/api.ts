@@ -208,6 +208,12 @@ export const api = {
       "collect_range",
       { placeCode, startDate, endDate }
     ),
+  collectToday: () =>
+    invoke<{ days_total: number; days_done: number; cancelled: boolean; errors: string[] }>(
+      "collect_today"
+    ),
+  refreshRaceOdds: (placeCode: number, raceDate: string, raceNo: number) =>
+    invoke<number>("refresh_race_odds", { placeCode, raceDate, raceNo }),
   cancelCollection: () => invoke<void>("cancel_collection"),
   syncPlayers: () => invoke<number>("sync_players"),
   searchPlayers: (query: string) => invoke<PlayerRow[]>("search_players", { query }),

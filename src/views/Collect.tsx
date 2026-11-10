@@ -47,6 +47,25 @@ export default function Collect() {
     }
   };
 
+  const collectToday = async () => {
+    setBusy(true);
+    setLogs([]);
+    setReport(null);
+    try {
+      const r = await api.collectToday();
+      setLogs((l) => [
+        ...l,
+        `=== 本日分収集完了: ${r.days_done}/${r.days_total} 開催日${r.cancelled ? "（キャンセル）" : ""} ===`,
+        ...(r.errors.length ? [`エラー ${r.errors.length} 件:`, ...r.errors.slice(0, 10)] : []),
+      ]);
+    } catch (e) {
+      setLogs((l) => [...l, `エラー: ${e}`]);
+    } finally {
+      setBusy(false);
+      api.dbStats().then(setStats).catch(() => {});
+    }
+  };
+
   const collectRecent = async (pc: number | null) => {
     setBusy(true);
     setLogs([]);
@@ -120,6 +139,7 @@ export default function Collect() {
           <button onClick={() => api.cancelCollection()}>キャンセル</button>
         ) : (
           <>
+            <button onClick={collectToday}>本日分をまとめて収集</button>
             <button onClick={() => collectRecent(placeCode)}>
               この場の最近の開催を一括収集
             </button>

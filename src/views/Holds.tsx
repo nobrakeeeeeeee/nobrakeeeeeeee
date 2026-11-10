@@ -20,6 +20,8 @@ export default function Holds({ initial }: Props) {
   const [raceNos, setRaceNos] = useState<number[]>([]);
   const [raceNo, setRaceNo] = useState<number | null>(null);
   const [detail, setDetail] = useState<RaceDetailData | null>(null);
+  const [detailTick, setDetailTick] = useState(0);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -53,13 +55,39 @@ export default function Holds({ initial }: Props) {
       .then(setDetail)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [selected, raceNo]);
+  }, [selected, raceNo, detailTick]);
 
   const fetchRecent = async (placeCode: number) => {
     setError(null);
     try {
       await api.recentHolds(placeCode);
       await loadHolds();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const recollect = async (h: Hold) => {
+    setNotice(`${h.place_name} ${h.race_date} を再収集中...`);
+    try {
+      const r = await api.collectDay(h.place_code, h.race_date);
+      setNotice(
+        `${h.race_date}: 結果${r.results_saved}件 / オッズ${r.odds_saved}件を更新しました`
+      );
+      await loadHolds();
+      if (selected?.placeCode === h.place_code && selected?.raceDate === h.race_date) {
+        setDetailTick((t) => t + 1);
+      }
+    } catch (e) {
+      setNotice(`再収集失敗: ${e}`);
+    }
+  };
+
+  const refreshOdds = async () => {
+    if (!selected || raceNo == null) return;
+    try {
+      await api.refreshRaceOdds(selected.placeCode, selected.raceDate, raceNo);
+      setDetailTick((t) => t + 1);
     } catch (e) {
       setError(String(e));
     }
@@ -88,6 +116,7 @@ export default function Holds({ initial }: Props) {
           ))}
         </div>
         {error && <p className="error">{error}</p>}
+        {notice && <p className="muted" style={{ fontSize: 12 }}>{notice}</p>}
         {[...byDate.entries()].map(([date, list]) => (
           <div key={date}>
             <div className="date-header">{date}</div>
@@ -95,24 +124,32 @@ export default function Holds({ initial }: Props) {
               const active =
                 selected?.placeCode === h.place_code && selected?.raceDate === h.race_date;
               return (
-                <button
-                  key={`${h.place_code}-${h.race_date}`}
-                  className={active ? "hold-item active" : "hold-item"}
-                  onClick={() =>
-                    setSelected({
-                      placeCode: h.place_code,
-                      placeName: h.place_name,
-                      raceDate: h.race_date,
-                      title: `${h.place_name} ${h.race_date} ${h.title}`,
-                    })
-                  }
-                >
-                  <span className="hold-place">{h.place_name}</span>
-                  <span className="muted">{h.title_csv || h.title}</span>
-                  {h.result_race_no ? (
-                    <span className="badge">結果{h.result_race_no}Rまで</span>
-                  ) : null}
-                </button>
+                <div key={`${h.place_code}-${h.race_date}`} className="hold-row">
+                  <button
+                    className={active ? "hold-item active" : "hold-item"}
+                    onClick={() =>
+                      setSelected({
+                        placeCode: h.place_code,
+                        placeName: h.place_name,
+                        raceDate: h.race_date,
+                        title: `${h.place_name} ${h.race_date} ${h.title}`,
+                      })
+                    }
+                  >
+                    <span className="hold-place">{h.place_name}</span>
+                    <span className="muted">{h.title_csv || h.title}</span>
+                    {h.result_race_no ? (
+                      <span className="badge">結果{h.result_race_no}Rまで</span>
+                    ) : null}
+                  </button>
+                  <button
+                    className="chip recollect"
+                    title="この開催日を再収集（払戻金・オッズのバックフィルにも）"
+                    onClick={() => recollect(h)}
+                  >
+                    再収集
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -139,7 +176,9 @@ export default function Holds({ initial }: Props) {
               ))}
             </div>
             {loading && <p>読み込み中...</p>}
-            {detail && raceNo != null && <RaceDetailView detail={detail} raceNo={raceNo} />}
+            {detail && raceNo != null && (
+              <RaceDetailView detail={detail} raceNo={raceNo} onRefreshOdds={refreshOdds} />
+            )}
           </>
         )}
       </div>
@@ -147,7 +186,15 @@ export default function Holds({ initial }: Props) {
   );
 }
 
-function RaceDetailView({ detail, raceNo }: { detail: RaceDetailData; raceNo: number }) {
+function RaceDetailView({
+  detail,
+  raceNo,
+  onRefreshOdds,
+}: {
+  detail: RaceDetailData;
+  raceNo: number;
+  onRefreshOdds: () => Promise<void>;
+}) {
   const info = detail.infos.find((i) => i.race_no === raceNo);
   return (
     <div>
@@ -193,7 +240,7 @@ function RaceDetailView({ detail, raceNo }: { detail: RaceDetailData; raceNo: nu
         </>
       )}
       {detail.refunds.length > 0 && <RefundsView refunds={detail.refunds} />}
-      {detail.odds.length > 0 && <OddsView odds={detail.odds} meta={detail.odds_meta} />}
+      {detail.odds.length > 0 && <OddsView odds={detail.odds} meta={detail.odds_meta} onRefresh={onRefreshOdds} />}
       <h3>出走表</h3>
       {detail.entries.length === 0 ? (
         <p className="muted">出走表データなし</p>
@@ -301,7 +348,15 @@ const EXPECT_LABELS: [string, string][] = [
   ["ai", "AI"],
 ];
 
-function OddsView({ odds, meta }: { odds: OddsRow[]; meta: OddsMeta | null }) {
+function OddsView({
+  odds,
+  meta,
+  onRefresh,
+}: {
+  odds: OddsRow[];
+  meta: OddsMeta | null;
+  onRefresh?: () => Promise<void>;
+}) {
   const groups = new Map<string, OddsRow[]>();
   for (const o of odds) {
     const list = groups.get(o.bet_type) ?? [];
@@ -314,14 +369,32 @@ function OddsView({ odds, meta }: { odds: OddsRow[]; meta: OddsMeta | null }) {
   ];
   const labelOf = (k: string) => BET_LABELS.find(([bk]) => bk === k)?.[1] ?? k;
   const [tab, setTab] = useState(ordered[0] ?? "tns");
+  const [refreshing, setRefreshing] = useState(false);
   const rows = groups.get(tab) ?? [];
+
+  const doRefresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const expects = meta?.expect && typeof meta.expect === "object" ? meta.expect : null;
   const sales = meta?.sales && typeof meta.sales === "object" ? meta.sales : null;
 
   return (
     <>
-      <h3>オッズ</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h3 style={{ margin: 0 }}>オッズ</h3>
+        {onRefresh && (
+          <button className="chip" onClick={doRefresh} disabled={refreshing}>
+            {refreshing ? "取得中..." : "オッズ再取得"}
+          </button>
+        )}
+      </div>
       {meta?.comment && <p className="muted" style={{ whiteSpace: "pre-wrap" }}>{meta.comment}</p>}
       {expects && (
         <div className="card-meta" style={{ marginBottom: 8 }}>

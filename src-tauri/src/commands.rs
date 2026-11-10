@@ -532,6 +532,94 @@ pub async fn collect_recent(
     }))
 }
 
+/// Collect all of today's holds across every venue.
+#[tauri::command]
+pub async fn collect_today(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    state.cancel.store(false, Ordering::Relaxed);
+    let body = state
+        .api
+        .get("/race_info/XML/Hold/Today")
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut seen = std::collections::HashSet::new();
+    let mut targets: Vec<(i64, String, String)> = Vec::new();
+    if let Some(list) = body.get("today").and_then(|v| v.as_array()) {
+        for item in list {
+            if let Some(h) = hold_from_today(item) {
+                let _ = state.db.lock().unwrap().upsert_hold(&h);
+                if seen.insert((h.place_code, h.race_date.clone())) {
+                    targets.push((
+                        h.place_code,
+                        h.race_date.clone(),
+                        format!("{} {}", h.place_name, h.title),
+                    ));
+                }
+            }
+        }
+    }
+
+    let mut days_done = 0i64;
+    let mut errors: Vec<String> = Vec::new();
+    for (pc, date, label) in targets {
+        if state.cancel.load(Ordering::Relaxed) {
+            let _ = app.emit("collect-log", "collection cancelled by user".to_string());
+            break;
+        }
+        let _ = app.emit("collect-log", format!("=== {label} ==="));
+        match collect_one_day(&app, state.inner(), pc, &date).await {
+            Ok(r) => {
+                days_done += 1;
+                let _ = app.emit(
+                    "collect-log",
+                    format!(
+                        "--- {} done: {} programs, {} entries, {} results, {} odds ---",
+                        r.race_date, r.programs_saved, r.entries_saved, r.results_saved, r.odds_saved
+                    ),
+                );
+            }
+            Err(e) => {
+                errors.push(format!("{date}: {e}"));
+                let _ = app.emit("collect-log", format!("{date}: error {e}"));
+            }
+        }
+    }
+
+    Ok(json!({
+        "days_total": days_done + errors.len() as i64,
+        "days_done": days_done,
+        "cancelled": state.cancel.load(Ordering::Relaxed),
+        "errors": errors,
+    }))
+}
+
+/// Re-fetch odds for a single race (lightweight; useful while betting is open).
+#[tauri::command]
+pub async fn refresh_race_odds(
+    state: State<'_, AppState>,
+    place_code: i64,
+    race_date: String,
+    race_no: i64,
+) -> Result<i64, String> {
+    let body = state
+        .api
+        .post(
+            "/race_info/Odds",
+            &json!({ "placeCode": place_code, "raceDate": race_date, "raceNo": race_no }),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .db
+        .lock()
+        .unwrap()
+        .save_race_odds(place_code, &race_date, race_no, &body)
+        .map(|n| n as i64)
+}
+
 #[tauri::command]
 pub fn cancel_collection(state: State<'_, AppState>) {
     state.cancel.store(true, Ordering::Relaxed);
